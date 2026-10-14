@@ -4,7 +4,7 @@ An open-source conformance suite for [x402](https://github.com/x402-foundation/x
 
 Point it at your x402 server, client, or facilitator, and it tells you where your implementation breaks the V2 spec. The focus is on failure cases like underpayment, replayed payments, expired signatures, and failed settlement. Those are the cases where someone loses funds or gets paid data for free.
 
-> **Status:** Phase 0 (research and setup). The test format is locked and the spec version is pinned. 3 of 30 tests are fully defined, and nothing is runnable yet. Alpha is planned for week 10 of the semester.
+> **Status:** Phase 0 (research and setup). The test format is locked and the spec version is pinned. 3 of 30 tests are fully defined, and SRV-01 runs end to end from the CLI. Alpha is planned for week 10 of the semester.
 
 ## Why
 
@@ -52,11 +52,35 @@ npm test                   # unit tests
 npm run check              # lint, format, typecheck, tests, catalog validation (what CI runs)
 ```
 
-Planned usage once the alpha ships:
+### Run SRV-01 against the local mock server
 
 ```bash
-npx x402-conformance run --config ./my-implementation.json
+npm run mock:server        # terminal 1: starts http://localhost:4402/paid
+npm run cli -- run --config configs/implementations/local-mock-server.json --test SRV-01
 ```
+
+Output:
+
+```
+x402 conformance 0.0.1  (spec e95b066)
+Implementation: local-mock-server (server) at http://localhost:4402
+
+✓ SRV-01  PASS            Unpaid request returns 402 with payment requirements  [high, 52ms]
+
+1 test(s): 1 passed, 0 failed, 0 advisory failure(s), 0 skipped, 0 error(s)
+
+JSON report: reports/local-mock-server-<timestamp>.json
+```
+
+The JSON report matches [`schemas/report.schema.json`](schemas/report.schema.json). Exit code is 0 with no failures, 1 with at least one non-advisory FAIL, and 2 for setup problems or ERROR results.
+
+### Test your own implementation
+
+Copy a file from `configs/implementations/`, point `url` and `resource.path` at your server, set `paidContentMarker` to a string that only appears in the paid response, and list your `features`. The config is validated against [`schemas/implementation-config.schema.json`](schemas/implementation-config.schema.json). The wallet key is read from the environment variable named in `wallet.privateKeyEnv` and is never stored in the config.
+
+Right now only SRV-01 runs end to end. Tests that need signed payments or on-chain checks report ERROR with "not implemented yet" until the payment signer and Anvil harness land.
+
+Once published to npm: `npx x402-conformance run --config ./my-implementation.json`.
 
 ## Repository layout
 

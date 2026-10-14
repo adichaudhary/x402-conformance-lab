@@ -1,0 +1,80 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/adichaudhary/x402-conformance-lab/schemas/implementation-config.schema.json",
+  "title": "x402 implementation config",
+  "description": "Describes one implementation under test. Lives in configs/implementations/<name>.json.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "role", "url", "features"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "name": {
+      "description": "Short identifier, used in reports and the compatibility grid.",
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$"
+    },
+    "displayName": { "type": "string" },
+    "version": {
+      "description": "Version or commit of the implementation being tested.",
+      "type": "string"
+    },
+    "role": { "enum": ["server", "facilitator", "client"] },
+    "url": {
+      "description": "Base URL. For a server, the origin hosting the paid resource. For a facilitator, the base that /verify, /settle, and /supported hang off.",
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https?://"
+    },
+    "resource": {
+      "description": "The paid resource to test (servers only).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path"],
+      "properties": {
+        "path": { "type": "string", "pattern": "^/" },
+        "method": {
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"],
+          "default": "GET"
+        },
+        "paidContentMarker": {
+          "description": "A string that appears in the body only when the paid content is served. Used by paidContentAbsent / paidContentPresent assertions.",
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "features": {
+      "description": "Feature flags this implementation supports. Tests whose 'requires' are not all listed here are SKIPped.",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9-]+(:[A-Za-z0-9_.*-]+)+$"
+      },
+      "uniqueItems": true
+    },
+    "wallet": {
+      "description": "Test wallet the suite pays from. Only the name of the environment variable is stored, never the key.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["privateKeyEnv"],
+      "properties": {
+        "privateKeyEnv": {
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    },
+    "requestTimeoutMs": {
+      "type": "integer",
+      "minimum": 100,
+      "default": 10000
+    },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "role": { "const": "server" } } },
+      "then": { "required": ["resource"] }
+    }
+  ]
+}

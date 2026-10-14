@@ -17,7 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate:catalog": "tsx scripts/validate-catalog.ts",
-    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run validate:catalog"
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run validate:catalog",
+    "mock:server": "tsx src/mocks/server/main.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",

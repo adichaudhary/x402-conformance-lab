@@ -40,6 +40,7 @@ export function getAjv(): Ajv2020 {
   ajv.addSchema(loadJson("test-definition.schema.json"));
   ajv.addSchema(loadJson("test-result.schema.json"));
   ajv.addSchema(loadJson("report.schema.json"));
+  ajv.addSchema(loadJson("implementation-config.schema.json"));
   ajv.addSchema(loadJson("x402/x402-v2.schema.json"));
   ajvInstance = ajv;
   return ajv;
@@ -55,6 +56,7 @@ export const validators = {
   testDefinition: () => compiled("test-definition.schema.json"),
   testResult: () => compiled("test-result.schema.json"),
   report: () => compiled("report.schema.json"),
+  implementationConfig: () => compiled("implementation-config.schema.json"),
   x402: (type: X402Type) => compiled(`x402/x402-v2.schema.json#/$defs/${type}`),
 };
 

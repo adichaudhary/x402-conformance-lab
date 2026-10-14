@@ -1,0 +1,15 @@
+{
+  "$schema": "../../schemas/implementation-config.schema.json",
+  "name": "local-mock-server",
+  "displayName": "Local mock resource server (src/mocks/server)",
+  "role": "server",
+  "url": "http://localhost:4402",
+  "resource": {
+    "path": "/paid",
+    "method": "GET",
+    "paidContentMarker": "x402-conformance-paid-content"
+  },
+  "features": ["scheme:exact", "network:eip155:31337"],
+  "wallet": { "privateKeyEnv": "X402_TEST_PRIVATE_KEY" },
+  "notes": "Start with: npm run mock:server. Handshake only. It does not verify or settle payments yet."
+}

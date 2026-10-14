@@ -33,14 +33,14 @@ Each test is one JSON file with an input, the expected behavior, and assertions 
 - JSON Schemas for tests, results, reports, and implementation configs
 - SRV-01, SRV-06, and SRV-13 fully defined
 - A script to open one issue per test, with labels and milestones (not run yet)
-- First runnable test: SRV-01 runs from the CLI against a local mock server
+- First runnable test: SRV-01 runs from the CLI and passes against both our mock server and the official TypeScript example server. A manual probe of the official server also confirmed the 400 vs 402 question above.
 
 ## Next steps
 
 - **Product (Adi):** Send outreach to the x402 maintainers and the six partner teams. Post the five spec questions as a Discussion upstream. Approve and run the issue script.
-- **Test framework (Pardhu):** Generalize the SRV-01 runner so it can run any catalog file. That means payment modes, modifications, and the "must" and "should" logic. Add the HTML or Markdown report.
+- **Test framework (Pardhu):** The runner already reads any catalog file. Next it needs an EIP-3009 payment signer with viem, so the "valid" and "modified" payment modes work. Then concurrent steps for SRV-14, and the mock facilitator in src/mocks/facilitator.
 - **Blockchain infrastructure (Chinmay):** Anvil setup with an EIP-3009 test token, plus Permit2 and the two x402 proxies at their canonical addresses. Funded test wallets. A verifying facilitator that SRV-06 and SRV-13 can use.
 - **Tests (Jay):** Write definitions for the remaining P0 server tests, starting with SRV-02 (now using atomic units), SRV-04, and SRV-08.
-- **Integration (Krish):** Get the official TypeScript example server running locally against the suite. Write configs for the official Python and Go servers.
+- **Integration (Krish):** Write configs for the official Python and Go example servers and get SRV-01 passing against them. The TypeScript one already works (see `docs/running-official-example.md`, including a Windows path-length gotcha).
 
 Questions or want to run the suite on your implementation? Reply here or open an issue.
