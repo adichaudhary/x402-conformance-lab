@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/adichaudhary/x402-conformance-lab/schemas/report.schema.json",
+  "title": "x402 conformance run report",
+  "description": "The JSON report written by `x402-conformance run`. Wraps one test-result per test.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["suiteVersion", "specCommit", "implementation", "startedAt", "finishedAt", "summary", "results"],
+  "properties": {
+    "suiteVersion": { "type": "string" },
+    "specCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },
+    "implementation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "role", "url"],
+      "properties": {
+        "name": { "type": "string" },
+        "role": { "enum": ["server", "facilitator", "client"] },
+        "url": { "type": "string" },
+        "version": { "type": "string" }
+      }
+    },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "finishedAt": { "type": "string", "format": "date-time" },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "pass", "fail", "skip", "error", "advisoryFail"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "pass": { "type": "integer", "minimum": 0 },
+        "fail": { "type": "integer", "minimum": 0 },
+        "skip": { "type": "integer", "minimum": 0 },
+        "error": { "type": "integer", "minimum": 0 },
+        "advisoryFail": {
+          "description": "FAIL results from advisory tests. Not included in fail.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "results": {
+      "type": "array",
+      "items": { "$ref": "test-result.schema.json" }
+    }
+  }
+}

@@ -1,0 +1,105 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-13",
+  "title": "Replaying a settled payment is rejected",
+  "role": "server",
+  "specArea": "replay-protection",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact.md?plain=1#L41-L42",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L612-L619",
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L142-L162"
+  ],
+  "severity": "critical",
+  "priority": "P0",
+  "advisory": false,
+  "requires": ["scheme:exact", "network:eip155", "chain:local"],
+  "input": {
+    "scenario": "Make one valid payment and let it settle. Then send the exact same PAYMENT-SIGNATURE header again.",
+    "setup": {
+      "facilitator": "verifying",
+      "chain": "local",
+      "payerFunding": "1000000000"
+    },
+    "steps": [
+      {
+        "id": "first",
+        "description": "A valid payment for the resource.",
+        "payment": {
+          "mode": "valid",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" }
+        },
+        "waitForSettlementMs": 3000
+      },
+      {
+        "id": "replay",
+        "description": "Resend the header from step 'first', byte for byte.",
+        "payment": { "mode": "replay", "replayOf": "first" },
+        "waitForSettlementMs": 3000
+      }
+    ]
+  },
+  "expectedBehavior": "The first request succeeds and settles. The replay is rejected with 402: either at verification (PAYMENT-REQUIRED with an error) or at settlement (PAYMENT-RESPONSE with success false). Either way, the paid content is not returned again and no further tokens move.",
+  "assertions": [
+    {
+      "id": "first-succeeds",
+      "target": "httpStatus",
+      "step": "first",
+      "precondition": true,
+      "description": "The original payment is accepted. If not, the replay cannot be tested (see SRV-03).",
+      "expect": { "equals": 200 }
+    },
+    {
+      "id": "first-settled",
+      "target": "header",
+      "step": "first",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "precondition": true,
+      "description": "The original payment settled successfully.",
+      "expect": { "equals": true }
+    },
+    {
+      "id": "replay-not-2xx",
+      "target": "httpStatus",
+      "step": "replay",
+      "description": "The replay is not answered with a success status.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "replay-status-402",
+      "target": "httpStatus",
+      "step": "replay",
+      "level": "should",
+      "description": "The replay returns 402 (Payment Failed).",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "replay-no-success-receipt",
+      "target": "header",
+      "step": "replay",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "No PAYMENT-RESPONSE for the replay reports success.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "replay-no-paid-content",
+      "target": "body",
+      "step": "replay",
+      "check": "paidContentAbsent",
+      "description": "Paid content is not returned for the replay."
+    },
+    {
+      "id": "replay-payto-unchanged",
+      "target": "onchain",
+      "step": "replay",
+      "measure": "balanceDelta",
+      "account": "payTo",
+      "description": "payTo balance does not change during the replay.",
+      "expect": { "equals": "0" }
+    }
+  ]
+}

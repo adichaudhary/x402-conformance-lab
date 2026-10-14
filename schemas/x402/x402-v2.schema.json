@@ -1,0 +1,139 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/adichaudhary/x402-conformance-lab/schemas/x402/x402-v2.schema.json",
+  "title": "x402 V2 core types",
+  "description": "Core x402 V2 types transcribed from specs/x402-specification-v2.md at x402-foundation/x402@e95b06661e1a2a8a9a21fce34cc28b9934834650 (sections 5.1 to 5.4 and 7.3). Scheme-specific rules, such as required extra fields, are checked by individual tests, not here. Unknown fields are allowed, since the spec does not forbid them.",
+  "$defs": {
+    "caip2": {
+      "description": "CAIP-2 chain ID, namespace:reference (core section 11.1).",
+      "type": "string",
+      "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$"
+    },
+    "atomicAmount": {
+      "description": "Amount in atomic token units, as a base-10 integer string (core section 5.1.2).",
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]*)$"
+    },
+    "ResourceInfo": {
+      "type": "object",
+      "required": ["url"],
+      "properties": {
+        "url": { "type": "string", "minLength": 1 },
+        "description": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "serviceName": { "type": "string", "maxLength": 32, "pattern": "^[\\x20-\\x7E]*$" },
+        "tags": {
+          "type": "array",
+          "maxItems": 5,
+          "items": { "type": "string", "maxLength": 32, "pattern": "^[\\x20-\\x7E]*$" }
+        },
+        "iconUrl": { "type": "string", "maxLength": 2048, "pattern": "^https?://" }
+      }
+    },
+    "PaymentRequirements": {
+      "type": "object",
+      "required": ["scheme", "network", "amount", "asset", "payTo", "maxTimeoutSeconds"],
+      "properties": {
+        "scheme": { "type": "string", "minLength": 1 },
+        "network": { "$ref": "#/$defs/caip2" },
+        "amount": { "$ref": "#/$defs/atomicAmount" },
+        "asset": { "type": "string", "minLength": 1 },
+        "payTo": { "type": "string", "minLength": 1 },
+        "maxTimeoutSeconds": { "type": "number", "exclusiveMinimum": 0 },
+        "extra": { "type": "object" }
+      }
+    },
+    "Extension": {
+      "type": "object",
+      "required": ["info", "schema"],
+      "properties": {
+        "info": { "type": "object" },
+        "schema": { "type": "object" }
+      }
+    },
+    "Extensions": {
+      "type": "object",
+      "additionalProperties": { "$ref": "#/$defs/Extension" }
+    },
+    "PaymentRequired": {
+      "type": "object",
+      "required": ["x402Version", "resource", "accepts"],
+      "properties": {
+        "x402Version": { "const": 2 },
+        "error": { "type": "string" },
+        "resource": { "$ref": "#/$defs/ResourceInfo" },
+        "accepts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/PaymentRequirements" }
+        },
+        "extensions": { "$ref": "#/$defs/Extensions" }
+      }
+    },
+    "PaymentPayload": {
+      "type": "object",
+      "required": ["x402Version", "accepted", "payload"],
+      "properties": {
+        "x402Version": { "const": 2 },
+        "resource": { "$ref": "#/$defs/ResourceInfo" },
+        "accepted": { "$ref": "#/$defs/PaymentRequirements" },
+        "payload": { "type": "object" },
+        "extensions": { "type": "object" }
+      }
+    },
+    "SettlementResponse": {
+      "type": "object",
+      "required": ["success", "transaction", "network"],
+      "properties": {
+        "success": { "type": "boolean" },
+        "errorReason": { "type": "string" },
+        "payer": { "type": "string" },
+        "transaction": { "type": "string" },
+        "network": { "$ref": "#/$defs/caip2" },
+        "amount": { "$ref": "#/$defs/atomicAmount" },
+        "extensions": { "type": "object" }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "errorReason": { "const": "settlement_pending" } }, "required": ["errorReason"] },
+          "then": { "properties": { "transaction": { "type": "string", "minLength": 1 } } }
+        }
+      ]
+    },
+    "VerifyResponse": {
+      "type": "object",
+      "required": ["isValid"],
+      "properties": {
+        "isValid": { "type": "boolean" },
+        "invalidReason": { "type": "string" },
+        "payer": { "type": "string" },
+        "extensions": { "type": "object" },
+        "extra": { "type": "object" }
+      }
+    },
+    "SupportedResponse": {
+      "type": "object",
+      "required": ["kinds", "extensions", "signers"],
+      "properties": {
+        "kinds": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["x402Version", "scheme", "network"],
+            "properties": {
+              "x402Version": { "type": "integer" },
+              "scheme": { "type": "string" },
+              "network": { "type": "string" },
+              "extra": { "type": "object" }
+            }
+          }
+        },
+        "extensions": { "type": "array", "items": { "type": "string" } },
+        "signers": {
+          "type": "object",
+          "additionalProperties": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    }
+  }
+}

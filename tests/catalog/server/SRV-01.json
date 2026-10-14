@@ -1,0 +1,68 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-01",
+  "title": "Unpaid request returns 402 with payment requirements",
+  "role": "server",
+  "specArea": "handshake",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L7-L53",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L70-L130",
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L164-L170"
+  ],
+  "severity": "high",
+  "priority": "P0",
+  "advisory": false,
+  "requires": [],
+  "input": {
+    "scenario": "Request the paid resource with no PAYMENT-SIGNATURE header. No chain or facilitator interaction is needed.",
+    "setup": {
+      "facilitator": "implementation",
+      "chain": "none"
+    },
+    "steps": [
+      {
+        "id": "unpaid",
+        "description": "Plain request to the paid resource, no payment header.",
+        "payment": { "mode": "none" }
+      }
+    ]
+  },
+  "expectedBehavior": "The server responds with HTTP 402 and a PAYMENT-REQUIRED header. The header is base64-encoded JSON that decodes to a PaymentRequired object with x402Version 2, a resource with a url, and at least one entry in accepts. The paid content is not returned.",
+  "assertions": [
+    {
+      "id": "status-402",
+      "target": "httpStatus",
+      "description": "Status is 402 Payment Required.",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "payment-required-present",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "description": "PAYMENT-REQUIRED header is present.",
+      "present": true
+    },
+    {
+      "id": "payment-required-valid",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "description": "PAYMENT-REQUIRED decodes to a valid V2 PaymentRequired object (x402Version 2, resource.url, non-empty accepts, atomic-unit amounts, CAIP-2 networks).",
+      "expect": { "matchesSchema": "PaymentRequired" }
+    },
+    {
+      "id": "no-payment-response",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "description": "No settlement receipt is sent for an unpaid request.",
+      "level": "should",
+      "present": false
+    },
+    {
+      "id": "no-paid-content",
+      "target": "body",
+      "check": "paidContentAbsent",
+      "description": "The paid content is not in the response body."
+    }
+  ]
+}

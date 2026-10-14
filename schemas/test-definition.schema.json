@@ -1,0 +1,429 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/adichaudhary/x402-conformance-lab/schemas/test-definition.schema.json",
+  "title": "x402 conformance test definition",
+  "description": "One test in the catalog. Each file in tests/catalog/<role>/ must validate against this schema.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "role",
+    "specRef",
+    "severity",
+    "priority",
+    "advisory",
+    "requires",
+    "input",
+    "expectedBehavior",
+    "assertions"
+  ],
+  "properties": {
+    "$schema": { "type": "string" },
+    "id": {
+      "description": "Stable test ID. The prefix must match the role.",
+      "type": "string",
+      "pattern": "^(SRV|FAC|CLI)-[0-9]{2}$"
+    },
+    "title": { "type": "string", "minLength": 5, "maxLength": 120 },
+    "role": { "enum": ["server", "facilitator", "client"] },
+    "specRef": {
+      "description": "Permalink to the primary spec section this test checks, pinned to a full commit SHA.",
+      "$ref": "#/$defs/specPermalink"
+    },
+    "additionalSpecRefs": {
+      "description": "Other spec sections the test relies on.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/specPermalink" },
+      "uniqueItems": true
+    },
+    "specArea": {
+      "description": "Spec area grouping from the RFC.",
+      "enum": [
+        "handshake",
+        "payment-required-schema",
+        "payment-payload",
+        "payment-validation",
+        "signature-validation",
+        "replay-protection",
+        "settlement",
+        "error-cases",
+        "facilitator-api",
+        "extensions"
+      ]
+    },
+    "severity": { "enum": ["critical", "high", "medium", "low"] },
+    "priority": { "enum": ["P0", "P1", "P2"] },
+    "advisory": {
+      "description": "True when the spec is ambiguous. Failures are reported but do not count against the implementation.",
+      "type": "boolean"
+    },
+    "advisoryReason": {
+      "description": "Why the test (or some of its assertions) is advisory. Required when advisory is true.",
+      "type": "string",
+      "minLength": 10
+    },
+    "requires": {
+      "description": "Feature flags the implementation must declare in its config. If any is missing, the result is SKIP.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/featureFlag" },
+      "uniqueItems": true
+    },
+    "input": { "$ref": "#/$defs/input" },
+    "expectedBehavior": {
+      "description": "What the spec says the implementation should do, in plain language.",
+      "type": "string",
+      "minLength": 10
+    },
+    "assertions": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/assertion" }
+    },
+    "notes": { "type": "string" }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "advisory": { "const": true } } },
+      "then": { "required": ["advisoryReason"] }
+    },
+    {
+      "if": { "properties": { "role": { "const": "server" } } },
+      "then": { "properties": { "id": { "type": "string", "pattern": "^SRV-" } } }
+    },
+    {
+      "if": { "properties": { "role": { "const": "facilitator" } } },
+      "then": { "properties": { "id": { "type": "string", "pattern": "^FAC-" } } }
+    },
+    {
+      "if": { "properties": { "role": { "const": "client" } } },
+      "then": { "properties": { "id": { "type": "string", "pattern": "^CLI-" } } }
+    }
+  ],
+  "$defs": {
+    "specPermalink": {
+      "type": "string",
+      "format": "uri",
+      "pattern": "^https://github\\.com/x402-foundation/x402/blob/[0-9a-f]{40}/specs/[^?#]+\\.md(\\?plain=1)?(#L[0-9]+(-L[0-9]+)?)?$"
+    },
+    "featureFlag": {
+      "description": "Namespaced flag, for example scheme:exact, network:eip155:31337, ext:payment-identifier, chain:local.",
+      "type": "string",
+      "pattern": "^[a-z0-9-]+(:[A-Za-z0-9_.*-]+)+$"
+    },
+    "jsonPointer": {
+      "type": "string",
+      "pattern": "^(/([^/~]|~[01])*)*$"
+    },
+    "input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scenario", "steps"],
+      "properties": {
+        "scenario": {
+          "description": "One or two sentences describing the setup.",
+          "type": "string"
+        },
+        "setup": { "$ref": "#/$defs/setup" },
+        "steps": {
+          "description": "Requests the runner sends, in order. Assertions refer to steps by id.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/step" }
+        }
+      }
+    },
+    "setup": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "facilitator": {
+          "description": "Which facilitator the server under test talks to. 'mock' returns scripted responses. 'verifying' is a facilitator that really checks payloads against the local chain. 'implementation' leaves the implementation's own facilitator in place.",
+          "enum": ["mock", "verifying", "implementation"]
+        },
+        "mockFacilitator": {
+          "description": "Scripted responses when facilitator is 'mock'.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "verify": { "$ref": "#/$defs/mockResponse" },
+            "settle": { "$ref": "#/$defs/mockResponse" },
+            "supported": { "$ref": "#/$defs/mockResponse" }
+          }
+        },
+        "chain": {
+          "enum": ["local", "testnet", "none"],
+          "default": "local"
+        },
+        "payerFunding": {
+          "description": "Payer token balance before the test, in atomic units.",
+          "type": "string",
+          "pattern": "^[0-9]+$"
+        }
+      }
+    },
+    "mockResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "status": { "type": "integer", "minimum": 100, "maximum": 599 },
+        "body": {},
+        "delayMs": { "type": "integer", "minimum": 0 },
+        "behavior": {
+          "description": "Shortcut for common faults.",
+          "enum": ["respond", "timeout", "connection-refused"]
+        }
+      }
+    },
+    "step": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "payment"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "description": { "type": "string" },
+        "method": {
+          "description": "HTTP method. Defaults to the method in the implementation config.",
+          "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD"]
+        },
+        "path": {
+          "description": "Path relative to the implementation's base URL. Defaults to the paid resource path in the config.",
+          "type": "string"
+        },
+        "payment": { "$ref": "#/$defs/payment" },
+        "concurrency": {
+          "description": "Send this many copies of the request at the same time.",
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "waitForSettlementMs": {
+          "description": "How long to wait after the response before taking on-chain snapshots.",
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "description": "none: no PAYMENT-SIGNATURE header. valid: a correct payment for the selected requirements. modified: a payment with modifications applied. raw: send rawHeader as-is. replay: resend the exact header from an earlier step.",
+          "enum": ["none", "valid", "modified", "raw", "replay"]
+        },
+        "select": {
+          "description": "Which accepts[] entry to pay. Defaults to the first one the runner supports.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scheme": { "type": "string" },
+            "network": { "type": "string" },
+            "assetTransferMethod": { "type": "string" }
+          }
+        },
+        "modifications": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/modification" }
+        },
+        "signing": {
+          "description": "after-modifications: re-sign so the signature is valid over the modified payload. before-modifications: sign the original, then modify, so the signature no longer matches.",
+          "enum": ["after-modifications", "before-modifications"],
+          "default": "after-modifications"
+        },
+        "rawHeader": { "type": "string" },
+        "replayOf": {
+          "description": "Step id whose PAYMENT-SIGNATURE header is resent unchanged.",
+          "type": "string"
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "modified" } } },
+          "then": { "required": ["modifications"] }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "raw" } } },
+          "then": { "required": ["rawHeader"] }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "replay" } } },
+          "then": { "required": ["replayOf"] }
+        }
+      ]
+    },
+    "modification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "op"],
+      "properties": {
+        "path": {
+          "description": "JSON Pointer into the PaymentPayload, for example /payload/authorization/value.",
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "op": {
+          "description": "set: replace with value. delete: remove the field. add/subtract: integer arithmetic on an atomic-unit string.",
+          "enum": ["set", "delete", "add", "subtract"]
+        },
+        "value": {
+          "description": "For add/subtract, an integer string. For set, any JSON value. Strings may use ${...} placeholders such as ${requirements.amount}, ${now}, ${wallet.other}.",
+          "type": ["string", "number", "boolean", "object", "array", "null"]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "op": { "enum": ["set", "add", "subtract"] } } },
+          "then": { "required": ["value"] }
+        }
+      ]
+    },
+    "expectation": {
+      "description": "One or more comparisons. All listed comparisons must hold.",
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "equals": {},
+        "notEquals": {},
+        "oneOf": { "type": "array", "minItems": 1 },
+        "notOneOf": { "type": "array", "minItems": 1 },
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "pattern": { "type": "string", "format": "regex" },
+        "matchesSchema": {
+          "description": "Name of a schema in schemas/x402/, for example PaymentRequired.",
+          "enum": ["PaymentRequired", "PaymentPayload", "SettlementResponse", "VerifyResponse", "SupportedResponse"]
+        }
+      }
+    },
+    "assertionBase": {
+      "type": "object",
+      "required": ["id", "target", "description"],
+      "properties": {
+        "id": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+        "target": { "enum": ["httpStatus", "header", "body", "onchain"] },
+        "description": { "type": "string" },
+        "step": {
+          "description": "Step id this assertion checks. Defaults to the last step.",
+          "type": "string"
+        },
+        "level": {
+          "description": "must: a failure makes the test FAIL. should: a failure is reported as a warning (spec recommends but does not require, or the requirement is ambiguous).",
+          "enum": ["must", "should"],
+          "default": "must"
+        },
+        "precondition": {
+          "description": "If true and the assertion fails, the test result is ERROR instead of FAIL, because the scenario could not be set up.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "assertion": {
+      "oneOf": [
+        { "$ref": "#/$defs/httpStatusAssertion" },
+        { "$ref": "#/$defs/headerAssertion" },
+        { "$ref": "#/$defs/bodyAssertion" },
+        { "$ref": "#/$defs/onchainAssertion" }
+      ]
+    },
+    "httpStatusAssertion": {
+      "allOf": [{ "$ref": "#/$defs/assertionBase" }],
+      "required": ["expect"],
+      "properties": {
+        "target": { "const": "httpStatus" },
+        "id": true,
+        "description": true,
+        "step": true,
+        "level": true,
+        "precondition": true,
+        "expect": { "$ref": "#/$defs/expectation" }
+      },
+      "unevaluatedProperties": false
+    },
+    "headerAssertion": {
+      "allOf": [{ "$ref": "#/$defs/assertionBase" }],
+      "required": ["name"],
+      "properties": {
+        "target": { "const": "header" },
+        "id": true,
+        "description": true,
+        "step": true,
+        "level": true,
+        "precondition": true,
+        "name": {
+          "description": "Header name, case-insensitive. x402 V2 uses PAYMENT-REQUIRED, PAYMENT-SIGNATURE, PAYMENT-RESPONSE.",
+          "type": "string",
+          "pattern": "^[A-Za-z0-9-]+$"
+        },
+        "present": {
+          "description": "true: header must be present. false: header must be absent. Omit to make no presence claim.",
+          "type": "boolean"
+        },
+        "decode": {
+          "enum": ["none", "base64json"],
+          "default": "none"
+        },
+        "path": {
+          "description": "JSON Pointer into the decoded value. Requires decode: base64json.",
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "expect": { "$ref": "#/$defs/expectation" },
+        "passIfAbsent": {
+          "description": "If the header is absent, the assertion passes. Used for 'no successful receipt' checks.",
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "anyOf": [{ "required": ["present"] }, { "required": ["expect"] }],
+      "unevaluatedProperties": false
+    },
+    "bodyAssertion": {
+      "allOf": [{ "$ref": "#/$defs/assertionBase" }],
+      "required": ["check"],
+      "properties": {
+        "target": { "const": "body" },
+        "id": true,
+        "description": true,
+        "step": true,
+        "level": true,
+        "precondition": true,
+        "check": {
+          "description": "paidContentAbsent: the body does not contain the paid-content marker from the implementation config. paidContentPresent: it does. json: parse as JSON and compare with expect.",
+          "enum": ["paidContentAbsent", "paidContentPresent", "json"]
+        },
+        "path": { "$ref": "#/$defs/jsonPointer" },
+        "expect": { "$ref": "#/$defs/expectation" }
+      },
+      "unevaluatedProperties": false
+    },
+    "onchainAssertion": {
+      "allOf": [{ "$ref": "#/$defs/assertionBase" }],
+      "required": ["measure", "account", "expect"],
+      "properties": {
+        "target": { "const": "onchain" },
+        "id": true,
+        "description": true,
+        "step": true,
+        "level": true,
+        "precondition": true,
+        "measure": {
+          "description": "balanceDelta: change in the account's balance of the asset, measured from just before the step to after it settles. authorizationUsed: whether the payment's nonce is marked used on the token contract.",
+          "enum": ["balanceDelta", "authorizationUsed"]
+        },
+        "account": {
+          "description": "payer, payTo, facilitator, or a literal 0x address.",
+          "type": "string",
+          "pattern": "^(payer|payTo|facilitator|0x[0-9a-fA-F]{40})$"
+        },
+        "asset": {
+          "description": "Token address. Defaults to the asset in the selected requirements.",
+          "type": "string"
+        },
+        "expect": { "$ref": "#/$defs/expectation" }
+      },
+      "unevaluatedProperties": false
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/adichaudhary/x402-conformance-lab/schemas/test-result.schema.json",
+  "title": "x402 conformance test result",
+  "description": "The outcome of running one test definition against one implementation.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["testId", "title", "role", "severity", "advisory", "status", "durationMs", "startedAt", "assertions"],
+  "properties": {
+    "testId": { "type": "string", "pattern": "^(SRV|FAC|CLI)-[0-9]{2}$" },
+    "title": { "type": "string" },
+    "role": { "enum": ["server", "facilitator", "client"] },
+    "severity": { "enum": ["critical", "high", "medium", "low"] },
+    "advisory": {
+      "description": "Copied from the definition. An advisory FAIL does not count against the implementation.",
+      "type": "boolean"
+    },
+    "specRef": { "type": "string", "format": "uri" },
+    "status": {
+      "description": "PASS: behaved correctly. FAIL: violated the spec. SKIP: implementation lacks a required feature. ERROR: our setup failed, so the result does not count.",
+      "enum": ["PASS", "FAIL", "SKIP", "ERROR"]
+    },
+    "durationMs": { "type": "number", "minimum": 0 },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "assertions": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/assertionResult" }
+    },
+    "warnings": {
+      "description": "Failed should-level assertions, as human-readable messages.",
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "skipReason": {
+      "description": "Which required feature flags were missing.",
+      "type": "string"
+    },
+    "error": {
+      "description": "What went wrong in our setup. Required when status is ERROR.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["message"],
+      "properties": {
+        "message": { "type": "string", "minLength": 1 },
+        "stack": { "type": "string" },
+        "step": { "type": "string" }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "status": { "const": "ERROR" } } },
+      "then": { "required": ["error"] }
+    },
+    {
+      "if": { "properties": { "status": { "const": "SKIP" } } },
+      "then": { "required": ["skipReason"] }
+    }
+  ],
+  "$defs": {
+    "assertionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "target", "level", "status", "description"],
+      "properties": {
+        "id": { "type": "string" },
+        "target": { "enum": ["httpStatus", "header", "body", "onchain"] },
+        "level": { "enum": ["must", "should"] },
+        "step": { "type": "string" },
+        "description": { "type": "string" },
+        "status": {
+          "description": "PASS or FAIL for an evaluated assertion. SKIP if it was not evaluated (for example an earlier precondition failed). ERROR if evaluating it threw.",
+          "enum": ["PASS", "FAIL", "SKIP", "ERROR"]
+        },
+        "expected": {},
+        "actual": {},
+        "message": { "type": "string" }
+      }
+    }
+  }
+}

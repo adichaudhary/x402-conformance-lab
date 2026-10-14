@@ -1,0 +1,148 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-06",
+  "title": "Underpayment is rejected",
+  "role": "server",
+  "specArea": "payment-validation",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact_evm.md?plain=1#L75-L81",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L596",
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L176-L186"
+  ],
+  "severity": "critical",
+  "priority": "P0",
+  "advisory": false,
+  "requires": ["scheme:exact", "network:eip155", "chain:local"],
+  "input": {
+    "scenario": "Pay 1 atomic unit less than the price, with a correctly signed EIP-3009 authorization. Two variants: the client claims the lower amount in accepted, or the client copies accepted unchanged and only signs for less.",
+    "setup": {
+      "facilitator": "verifying",
+      "chain": "local",
+      "payerFunding": "1000000000"
+    },
+    "steps": [
+      {
+        "id": "underpay-claimed",
+        "description": "accepted.amount and authorization.value are both price minus 1. The server should see that accepted matches none of its offers.",
+        "payment": {
+          "mode": "modified",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" },
+          "modifications": [
+            { "path": "/accepted/amount", "op": "subtract", "value": "1" },
+            { "path": "/payload/authorization/value", "op": "subtract", "value": "1" }
+          ],
+          "signing": "after-modifications"
+        },
+        "waitForSettlementMs": 3000
+      },
+      {
+        "id": "underpay-hidden",
+        "description": "accepted is copied unchanged from the offer, but authorization.value is price minus 1. Only verification of the signed authorization catches this.",
+        "payment": {
+          "mode": "modified",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" },
+          "modifications": [{ "path": "/payload/authorization/value", "op": "subtract", "value": "1" }],
+          "signing": "after-modifications"
+        },
+        "waitForSettlementMs": 3000
+      }
+    ]
+  },
+  "expectedBehavior": "The server rejects both payments. Per the HTTP transport, a failed verification maps to 402. The server does not return the paid content, does not send a PAYMENT-RESPONSE with success true, and no tokens move on chain.",
+  "assertions": [
+    {
+      "id": "claimed-not-2xx",
+      "target": "httpStatus",
+      "step": "underpay-claimed",
+      "description": "Claimed underpayment is not answered with a success status.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "claimed-status-402",
+      "target": "httpStatus",
+      "step": "underpay-claimed",
+      "level": "should",
+      "description": "Claimed underpayment returns 402 (Payment Failed).",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "claimed-no-success-receipt",
+      "target": "header",
+      "step": "underpay-claimed",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "No PAYMENT-RESPONSE reports success.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "claimed-no-paid-content",
+      "target": "body",
+      "step": "underpay-claimed",
+      "check": "paidContentAbsent",
+      "description": "Paid content is not returned."
+    },
+    {
+      "id": "claimed-payto-unchanged",
+      "target": "onchain",
+      "step": "underpay-claimed",
+      "measure": "balanceDelta",
+      "account": "payTo",
+      "description": "payTo balance does not change.",
+      "expect": { "equals": "0" }
+    },
+    {
+      "id": "hidden-not-2xx",
+      "target": "httpStatus",
+      "step": "underpay-hidden",
+      "description": "Hidden underpayment is not answered with a success status.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "hidden-status-402",
+      "target": "httpStatus",
+      "step": "underpay-hidden",
+      "level": "should",
+      "description": "Hidden underpayment returns 402 (Payment Failed).",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "hidden-no-success-receipt",
+      "target": "header",
+      "step": "underpay-hidden",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "No PAYMENT-RESPONSE reports success.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "hidden-no-paid-content",
+      "target": "body",
+      "step": "underpay-hidden",
+      "check": "paidContentAbsent",
+      "description": "Paid content is not returned."
+    },
+    {
+      "id": "hidden-payto-unchanged",
+      "target": "onchain",
+      "step": "underpay-hidden",
+      "measure": "balanceDelta",
+      "account": "payTo",
+      "description": "payTo balance does not change.",
+      "expect": { "equals": "0" }
+    },
+    {
+      "id": "hidden-payer-unchanged",
+      "target": "onchain",
+      "step": "underpay-hidden",
+      "measure": "balanceDelta",
+      "account": "payer",
+      "description": "Payer balance does not change.",
+      "expect": { "equals": "0" }
+    }
+  ],
+  "notes": "The 'hidden' variant needs a facilitator that really verifies. A mock that approves everything would make a correct server look broken, because the spec puts amount verification in the facilitator's verification logic."
+}
