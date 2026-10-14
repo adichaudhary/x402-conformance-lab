@@ -1,0 +1,133 @@
+# Spec audit: RFC test catalog vs. x402 V2
+
+Pinned spec: commit `e95b066` (see [SPEC_VERSION.md](SPEC_VERSION.md)). Audited 2026-10-14.
+
+Every test in the RFC catalog was checked against the pinned spec text. Where the spec text was unclear, we also checked what the official TypeScript reference implementation (`typescript/packages/core` and `typescript/packages/mechanisms/evm` at the same commit) actually does. The reference code is evidence of intent, not the spec itself.
+
+**Status key**
+
+- **OK**: the RFC row matches the spec.
+- **Corrected**: the RFC row is wrong. The test definition follows the spec instead.
+- **Advisory**: the spec is ambiguous or uses non-normative language. Per the RFC risk plan, the test runs and reports, but a failure is reported as advisory and does not count toward the implementation's score. We raise the question with the maintainers.
+
+Some tests are split: the core security property is a hard assertion, and only the exact status code is advisory. Assertions support this with `level: "should"` (see [TEST_FORMAT.md](TEST_FORMAT.md)).
+
+## Summary of changes to the RFC
+
+1. **SRV-02 is wrong about units.** `PaymentRequirements.amount` is a string in **atomic token units** (`"10000"` = 0.01 USDC with 6 decimals), not whole token units. The test must check that `amount` is a base-10 integer string. ([core §5.1.2][core-req-fields])
+2. **SRV-04 status code conflicts with the reference implementation.** The HTTP transport spec maps "malformed payment payload" to **400** ([http Error Handling][http-errors]). The reference TypeScript server treats an undecodable `PAYMENT-SIGNATURE` header as "no payment" and returns **402** with a fresh `PAYMENT-REQUIRED`. We keep 400 as the expected value, mark the status assertion advisory, and will ask the maintainers which is correct. "No data returned" stays a hard assertion.
+3. **SRV-05 must not use version 1.** V1 is still a defined protocol version and the reference server accepts V1 payloads alongside V2. Sending `x402Version: 1` is not "wrong" for a dual-stack server. The test should send an undefined version (for example `3` or `0`). Status code (400 vs 402) is advisory, since the spec has an error code (`invalid_x402_version`) but no explicit HTTP mapping for it.
+4. **SRV-07 holds, but the EVM scheme text is loose.** The core error list defines `invalid_exact_evm_payload_authorization_value_mismatch` as "does not **exactly** match", and the reference facilitator uses strict equality for both EIP-3009 and Permit2. But `scheme_exact_evm.md` says the amount must "meet" the requirements (EIP-3009) and "cover" the payment (Permit2), which reads like `>=`. Marked advisory until the maintainers confirm.
+5. **CLI-02 wording is too strict.** The spec says the client "must include at least the info received; it may append additional info but cannot delete or overwrite existing info" ([core §5.1.2][core-extensions]). "Unmodified" would fail a client that correctly appends, for example, a `payment-identifier` `id`. The test checks for a superset, not equality.
+6. **FAC-02 payer is optional.** `VerifyResponse.payer` is optional in the spec. The test asserts that *if* `payer` is present it equals the signer. Presence is a `should`.
+7. **SRV-19 expected status is 409.** The payment-identifier extension specifies `409 Conflict` for "same id, different payload". The surrounding text uses "should", so the test is advisory.
+8. **Header names.** The RFC never names the headers. They are `PAYMENT-REQUIRED` (server to client), `PAYMENT-SIGNATURE` (client to server), and `PAYMENT-RESPONSE` (server to client). All three carry base64-encoded JSON. ([http Header Summary][http-headers]) The RFC's "settlement receipt" and "failure receipt" are both the `PAYMENT-RESPONSE` header (`success: true` or `success: false`).
+9. **Gap: no `upto` tests.** The RFC goals include pay-up-to-a-limit payments, but no catalog test targets `upto`. The `upto` EVM binding has testable MUSTs that differ from `exact`: settle amount `<=` the signed maximum, verify-time equality against the ceiling, the `invalid_upto_evm_payload_settlement_exceeds_amount` error, and facilitator address binding. Recommend adding 2 to 3 `upto` tests in Beta, or parameterizing SRV-03/SRV-06/FAC-05 by scheme.
+10. **Infra note.** `upto` on EVM uses Permit2 only, and `exact` Permit2 needs the `x402ExactPermit2Proxy`. The local Anvil setup needs Permit2 and both proxies deployed at their canonical CREATE2 addresses (`0x402085c2...20001` and `0x4020A4f3...40002`), not just an EIP-3009 token.
+
+## Status code check
+
+| RFC assumption | Spec says | Verdict |
+| --- | --- | --- |
+| No payment returns 402 | 402 with `PAYMENT-REQUIRED` header ([http][http-402]) | OK |
+| Malformed payment returns 400 | "Invalid Payment: 400, malformed payment payload or requirements" ([http][http-errors]) | OK per spec, but reference returns 402. Advisory. |
+| Verification failure (underpay, wrong recipient, bad sig, expired) | "Payment Failed: 402, payment verification or settlement failed" ([http][http-errors]) | 402. The RFC didn't state a code for these. |
+| Settlement failure returns 402 with failure receipt | 402 with `PAYMENT-RESPONSE` where `success: false` ([http failure example][http-settle-fail]) | OK |
+| Facilitator error / server error | "Server Error: 500" ([http][http-errors]) | Spec gives 500. The RFC only requires "no paid data", which is the right hard assertion. |
+| Permit2 allowance missing | `412 Precondition Failed`, error `PERMIT2_ALLOWANCE_REQUIRED` ([exact EVM][evm-permit2-verify]) | Not in RFC. Worth knowing for Permit2 test setup. |
+
+## Per-test findings
+
+All links point to the pinned commit.
+
+### Resource server
+
+| ID | Spec reference | Status | Notes |
+| --- | --- | --- | --- |
+| SRV-01 | [http: Payment Required Signaling][http-402], [core §5.1][core-payreq] | OK | Assert 402, `PAYMENT-REQUIRED` header present, base64 decodes to a valid `PaymentRequired` with `x402Version: 2` and a non-empty `accepts`. The body is not part of the protocol ([http Response Body][http-body]). |
+| SRV-02 | [core §5.1.2][core-req-fields], [core §11.1][core-caip2], [exact EVM eip3009 extra][evm-3009-extra] | **Corrected** | Amount is atomic units, not whole units. Required fields: `x402Version`, `resource.url`, `accepts[]` with `scheme`, `network` (CAIP-2), `amount`, `asset`, `payTo`, `maxTimeoutSeconds`. For `exact` + EIP-3009 on EVM, `extra.name` and `extra.version` are required. For `upto` on EVM, `extra.facilitatorAddress` is required. |
+| SRV-03 | [http: Settlement Response Delivery][http-settle], [core §5.3][core-settle-resp] | OK | 200 with `PAYMENT-RESPONSE` decoding to `success: true`, non-empty `transaction`, and `network`. Also check the transfer on chain. |
+| SRV-04 | [http Error Handling][http-errors], [core §9 `invalid_payload`][core-err-payload] | **Advisory (status)** | Spec says 400. Reference returns 402. Hard assertion: no paid data, no successful `PAYMENT-RESPONSE`. Should-level: status 400. |
+| SRV-05 | [core §5.1.2 `x402Version`][core-payreq-version], [core §9 `invalid_x402_version`][core-err-version] | **Corrected + Advisory (status)** | Use an undefined version, not 1. Hard: rejected (not 2xx), no data. Should: 400. |
+| SRV-06 | [exact EVM verification][evm-3009-verify], [core §9 `value_mismatch`][core-err-value] | OK | Verification failure, so 402. Also assert no `PAYMENT-RESPONSE` with `success: true`, no paid body, no transfer on chain. |
+| SRV-07 | [core §9 `value_mismatch`][core-err-value], [exact EVM verification][evm-3009-verify], [exact EVM Permit2 step 4][evm-permit2-verify] | **Advisory** | Core text says "exactly". Scheme text says "meet"/"covers". Reference enforces equality. |
+| SRV-08 | [exact EVM verification][evm-3009-verify], [core §9 `recipient_mismatch`][core-err-recipient], [exact transfer correctness][exact-transfer] | OK | |
+| SRV-09 | [exact EVM verification step 4][evm-3009-verify], [core §9 `invalid_network`][core-err-network] | OK | Two sub-cases: wrong `asset`, wrong `network`. Each should be its own scenario in the definition. |
+| SRV-10 | [exact EVM verification step 1][evm-3009-verify], [core §9 `invalid_exact_evm_payload_signature`][core-err-sig] | OK | |
+| SRV-11 | [core §5.2.2 `validBefore`][core-auth-fields], [core §9 `valid_before`][core-err-time] | OK | |
+| SRV-12 | [core §5.2.2 `validAfter`][core-auth-fields], [core §9 `valid_after`][core-err-time] | OK | |
+| SRV-13 | [core §10.1][core-replay], [exact: Replay][exact-replay] | OK | "A consumed primitive MUST produce a settlement failure, never a success." The server may reject at verify (402 + `PAYMENT-REQUIRED`) or at settle (402 + `PAYMENT-RESPONSE` `success: false`). Both pass. |
+| SRV-14 | [exact: Replay and Duplicate delivery][exact-replay] | OK | On EVM, a duplicate EIP-3009 submission reverts on chain, so at most one request should get data. Run with N≥5 concurrent requests. |
+| SRV-15 | [core §2 Core Payment Flow][core-flow], [core §6.1 invariant][core-flows] | OK | Mock facilitator returns `isValid: false`. Expect 402, no data. |
+| SRV-16 | [http failure example][http-settle-fail], [core §5.3][core-settle-resp] | OK | Mock facilitator returns `success: false`. Expect 402 with `PAYMENT-RESPONSE` `success: false`. |
+| SRV-17 | [http Error Handling (500)][http-errors] | OK (hard), Advisory (status) | Hard: no paid data. Should: 5xx. |
+| SRV-18 | [core §9 `settlement_pending`][core-err-pending], [core §5.3 `transaction`][core-settle-resp] | **Advisory** | The spec defines `settlement_pending` as non-terminal on the facilitator side. It does not say what the server must send the client. A 200 with `PAYMENT-RESPONSE` `success: true` is clearly wrong. Anything else is unclear. |
+| SRV-19 | [payment-identifier: Idempotency Behavior][pid-idempotency] | **Advisory** | Expected 409. Requires the `payment-identifier` extension (SKIP otherwise). |
+
+### Facilitator
+
+| ID | Spec reference | Status | Notes |
+| --- | --- | --- | --- |
+| FAC-01 | [core §7.3 GET /supported][core-supported] | OK | `kinds[]`, `extensions[]`, and `signers` are all required. |
+| FAC-02 | [core §7.1 POST /verify][core-verify], [core §5.4][core-verify-resp] | **Corrected** | `payer` is optional. If present, it must equal `authorization.from`. |
+| FAC-03 | [core §9 Error Handling][core-errors] | OK (codes), Advisory (HTTP status) | The spec lists the codes but not the HTTP status of a `/verify` that returns `isValid: false`. Assert on `invalidReason`. |
+| FAC-04 | [core §7.1 read-only][core-verify] | OK | "/verify is read-only ... MUST NOT commit payment state or write onchain state." Strong MUST. |
+| FAC-05 | [exact: Transfer correctness][exact-transfer], [exact EVM settlement][evm-3009-settle] | OK | Check on chain: payer balance down by `amount`, `payTo` up by `amount`, nothing else moved in that asset. |
+| FAC-06 | [exact: Replay][exact-replay], [core §10.1][core-replay] | OK | Second `/settle` must return `success: false`. Watch for facilitators that return `settlement_pending` on the retry (allowed by §9) and treat that as non-success. |
+| FAC-07 | [core §5.3 SettleResponse][core-settle-resp], [core §5.4 VerifyResponse][core-verify-resp], [core §7.2 error example][core-settle] | OK | Settle failure: `success: false`, `errorReason`, `transaction` (empty string allowed), `network`. |
+| FAC-08 | [core §9 `invalid_network`, `invalid_scheme`, `unsupported_scheme`][core-err-network] | **Advisory** | `invalid_scheme` and `unsupported_scheme` overlap and the spec doesn't say which to use when. Accept either. |
+
+### Client
+
+| ID | Spec reference | Status | Notes |
+| --- | --- | --- | --- |
+| CLI-01 | [core §5.2 PaymentPayload][core-payload], [core §5.2.2 nonce][core-auth-fields], [http Payment Payload Transmission][http-sig] | OK | `accepted` must deep-equal one of the offered `accepts[]` entries. `authorization.to` = `payTo`, `value` = `amount`. Fresh 32-byte nonce per payment. |
+| CLI-02 | [core §5.1.2 Extensions][core-extensions] | **Corrected** | Superset check, not equality. |
+| CLI-03 | [core §6.1 Payment Flow Models][core-flows] | **Advisory** | The spec has a MUST for unrecognized `paymentFlow` and a SHOULD to skip such entries. It says nothing explicit about unsupported schemes or networks. Test the `paymentFlow` case as hard and the scheme/network case as advisory. |
+
+## Questions to raise with the maintainers
+
+1. Malformed `PAYMENT-SIGNATURE`: should the server return 400 (transport spec) or 402 (reference behavior)? (SRV-04)
+2. Exact EVM amount check: is overpayment rejected? If yes, could `scheme_exact_evm.md` say "equals" instead of "meet" and "covers"? (SRV-07)
+3. Which HTTP status should a server return for an unsupported `x402Version`? (SRV-05)
+4. What should a resource server return to the client when its facilitator returns `settlement_pending`? (SRV-18)
+5. When should a facilitator use `invalid_scheme` vs `unsupported_scheme`? (FAC-08)
+
+[core-flow]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L36-L45
+[core-payreq]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L70-L118
+[core-payreq-version]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L114
+[core-req-fields]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L120-L130
+[core-extensions]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L143-L150
+[core-payload]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L152-L205
+[core-auth-fields]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L214-L223
+[core-settle-resp]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L225-L252
+[core-verify-resp]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L254-L269
+[core-flows]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L283-L299
+[core-verify]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L305-L391
+[core-settle]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L393-L424
+[core-supported]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L439-L492
+[core-caip2]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L627-L642
+[core-errors]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L589-L608
+[core-err-time]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L594-L595
+[core-err-value]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L596
+[core-err-sig]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L597
+[core-err-recipient]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L598
+[core-err-network]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L599-L603
+[core-err-payload]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L600
+[core-err-version]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L604
+[core-err-pending]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L608
+[core-replay]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L612-L619
+[http-402]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L7-L53
+[http-sig]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L55-L60
+[http-settle]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L111-L140
+[http-settle-fail]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L142-L162
+[http-headers]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L164-L170
+[http-body]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L172-L174
+[http-errors]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L176-L186
+[exact-transfer]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact.md?plain=1#L39
+[exact-replay]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact.md?plain=1#L41-L42
+[evm-3009-extra]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact_evm.md?plain=1#L69-L73
+[evm-3009-verify]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact_evm.md?plain=1#L75-L81
+[evm-3009-settle]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact_evm.md?plain=1#L83-L87
+[evm-permit2-verify]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact_evm.md?plain=1#L174-L201
+[pid-idempotency]: https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/extensions/payment_identifier.md?plain=1#L80-L111
