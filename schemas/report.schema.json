@@ -5,7 +5,15 @@
   "description": "The JSON report written by `x402-conformance run`. Wraps one test-result per test.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["suiteVersion", "specCommit", "implementation", "startedAt", "finishedAt", "summary", "results"],
+  "required": [
+    "suiteVersion",
+    "specCommit",
+    "implementation",
+    "startedAt",
+    "finishedAt",
+    "summary",
+    "results"
+  ],
   "properties": {
     "suiteVersion": { "type": "string" },
     "specCommit": { "type": "string", "pattern": "^[0-9a-f]{40}$" },

@@ -293,7 +293,13 @@
         "pattern": { "type": "string", "format": "regex" },
         "matchesSchema": {
           "description": "Name of a schema in schemas/x402/, for example PaymentRequired.",
-          "enum": ["PaymentRequired", "PaymentPayload", "SettlementResponse", "VerifyResponse", "SupportedResponse"]
+          "enum": [
+            "PaymentRequired",
+            "PaymentPayload",
+            "SettlementResponse",
+            "VerifyResponse",
+            "SupportedResponse"
+          ]
         }
       }
     },

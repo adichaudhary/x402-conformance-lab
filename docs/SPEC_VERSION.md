@@ -4,15 +4,15 @@ Every release of this suite targets one fixed snapshot of the x402 spec. Test de
 
 ## Current pin
 
-| Field | Value |
-| --- | --- |
-| Repository | https://github.com/x402-foundation/x402 |
-| Pinned commit | [`e95b06661e1a2a8a9a21fce34cc28b9934834650`](https://github.com/x402-foundation/x402/tree/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs) |
-| Commit date | 2026-10-13 |
-| `specs/` tree hash | `fd92aa2f26e0b20985479ef43ab54cb28b555cf2` |
+| Field                             | Value                                                                                                                                                                                |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Repository                        | https://github.com/x402-foundation/x402                                                                                                                                              |
+| Pinned commit                     | [`e95b06661e1a2a8a9a21fce34cc28b9934834650`](https://github.com/x402-foundation/x402/tree/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs)                                            |
+| Commit date                       | 2026-10-13                                                                                                                                                                           |
+| `specs/` tree hash                | `fd92aa2f26e0b20985479ef43ab54cb28b555cf2`                                                                                                                                           |
 | Last commit that changed `specs/` | [`1566e13f3dbe12ca211761b0bb30215cb10471aa`](https://github.com/x402-foundation/x402/commit/1566e13f3dbe12ca211761b0bb30215cb10471aa) (2026-10-06, builder-code settlement metadata) |
-| Protocol version | x402 V2 (`x402Version: 2`) |
-| Pinned on | 2026-10-14 |
+| Protocol version                  | x402 V2 (`x402Version: 2`)                                                                                                                                                           |
+| Pinned on                         | 2026-10-14                                                                                                                                                                           |
 
 Permalink base for test definitions:
 

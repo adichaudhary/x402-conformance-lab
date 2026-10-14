@@ -17,23 +17,23 @@ The validator also checks a few things the schema can't: the file name matches `
 
 ## Top-level fields
 
-| Field | Required | What it is |
-| --- | --- | --- |
-| `id` | yes | `SRV-NN`, `FAC-NN`, or `CLI-NN`. The prefix must match `role`. |
-| `title` | yes | One line, under 120 characters. |
-| `role` | yes | `server`, `facilitator`, or `client`. The role of the implementation under test. |
-| `specRef` | yes | Permalink to the main spec section, pinned to a full commit SHA. Use `?plain=1#Lx-Ly` so the line anchor works on Markdown files. |
-| `additionalSpecRefs` | no | Other sections the test depends on. |
-| `specArea` | no | One of the RFC's spec areas (`handshake`, `payment-validation`, ...). |
-| `severity` | yes | `critical`, `high`, `medium`, `low`. Defined in the RFC section 5. |
-| `priority` | yes | `P0` (alpha), `P1` (beta), `P2` (v1.0 optional). |
-| `advisory` | yes | `true` if the spec is ambiguous here. Advisory failures are reported but don't count. |
-| `advisoryReason` | if advisory | What is ambiguous. Link the question you raised upstream. |
-| `requires` | yes | Feature flags. If the implementation's config doesn't list one, the result is SKIP. Use `[]` for none. |
-| `input` | yes | Setup and the requests to send. See below. |
-| `expectedBehavior` | yes | Plain-language summary of what the spec requires. |
-| `assertions` | yes | The checks. See below. |
-| `notes` | no | Anything a reviewer should know. |
+| Field                | Required    | What it is                                                                                                                        |
+| -------------------- | ----------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                 | yes         | `SRV-NN`, `FAC-NN`, or `CLI-NN`. The prefix must match `role`.                                                                    |
+| `title`              | yes         | One line, under 120 characters.                                                                                                   |
+| `role`               | yes         | `server`, `facilitator`, or `client`. The role of the implementation under test.                                                  |
+| `specRef`            | yes         | Permalink to the main spec section, pinned to a full commit SHA. Use `?plain=1#Lx-Ly` so the line anchor works on Markdown files. |
+| `additionalSpecRefs` | no          | Other sections the test depends on.                                                                                               |
+| `specArea`           | no          | One of the RFC's spec areas (`handshake`, `payment-validation`, ...).                                                             |
+| `severity`           | yes         | `critical`, `high`, `medium`, `low`. Defined in the RFC section 5.                                                                |
+| `priority`           | yes         | `P0` (alpha), `P1` (beta), `P2` (v1.0 optional).                                                                                  |
+| `advisory`           | yes         | `true` if the spec is ambiguous here. Advisory failures are reported but don't count.                                             |
+| `advisoryReason`     | if advisory | What is ambiguous. Link the question you raised upstream.                                                                         |
+| `requires`           | yes         | Feature flags. If the implementation's config doesn't list one, the result is SKIP. Use `[]` for none.                            |
+| `input`              | yes         | Setup and the requests to send. See below.                                                                                        |
+| `expectedBehavior`   | yes         | Plain-language summary of what the spec requires.                                                                                 |
+| `assertions`         | yes         | The checks. See below.                                                                                                            |
+| `notes`              | no          | Anything a reviewer should know.                                                                                                  |
 
 ### Feature flags
 
@@ -63,13 +63,13 @@ Flags are namespaced strings. Current ones:
 
 Each step is one HTTP request (or `concurrency` identical requests sent at once). `payment.mode` controls the `PAYMENT-SIGNATURE` header:
 
-| Mode | Header sent |
-| --- | --- |
-| `none` | No header |
-| `valid` | A correct payment for the selected `accepts[]` entry |
-| `modified` | A correct payment with `modifications` applied |
-| `raw` | `rawHeader`, exactly as written (for malformed input) |
-| `replay` | The exact header from step `replayOf` |
+| Mode       | Header sent                                           |
+| ---------- | ----------------------------------------------------- |
+| `none`     | No header                                             |
+| `valid`    | A correct payment for the selected `accepts[]` entry  |
+| `modified` | A correct payment with `modifications` applied        |
+| `raw`      | `rawHeader`, exactly as written (for malformed input) |
+| `replay`   | The exact header from step `replayOf`                 |
 
 A modification is `{ "path": <JSON Pointer into the PaymentPayload>, "op": "set" | "delete" | "add" | "subtract", "value": ... }`. `add` and `subtract` do integer math on atomic-unit strings. `signing` decides whether the signature is computed after the modifications (`after-modifications`, the default, gives a valid signature over bad values) or before (`before-modifications`, gives a broken signature).
 
@@ -83,12 +83,12 @@ Every assertion has `id`, `target`, `description`, and optionally:
 
 There are four targets:
 
-| `target` | Extra fields | Checks |
-| --- | --- | --- |
-| `httpStatus` | `expect` | The response status code |
-| `header` | `name`, `present`, `decode`, `path`, `expect`, `passIfAbsent` | A response header. `decode: "base64json"` decodes x402 headers. `path` is a JSON Pointer into the decoded value. |
-| `body` | `check`, `path`, `expect` | `paidContentAbsent` / `paidContentPresent` look for the paid-content marker from the implementation config. `json` parses the body and compares at `path`. |
-| `onchain` | `measure`, `account`, `asset`, `expect` | `balanceDelta` is the change in `account`'s token balance across the step. `account` is `payer`, `payTo`, `facilitator`, or an address. |
+| `target`     | Extra fields                                                  | Checks                                                                                                                                                     |
+| ------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `httpStatus` | `expect`                                                      | The response status code                                                                                                                                   |
+| `header`     | `name`, `present`, `decode`, `path`, `expect`, `passIfAbsent` | A response header. `decode: "base64json"` decodes x402 headers. `path` is a JSON Pointer into the decoded value.                                           |
+| `body`       | `check`, `path`, `expect`                                     | `paidContentAbsent` / `paidContentPresent` look for the paid-content marker from the implementation config. `json` parses the body and compares at `path`. |
+| `onchain`    | `measure`, `account`, `asset`, `expect`                       | `balanceDelta` is the change in `account`'s token balance across the step. `account` is `payer`, `payTo`, `facilitator`, or an address.                    |
 
 `expect` takes one or more of `equals`, `notEquals`, `oneOf`, `notOneOf`, `min`, `max`, `pattern`, `matchesSchema`. All of them must hold.
 

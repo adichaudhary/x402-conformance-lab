@@ -15,7 +15,8 @@ export interface Expectation {
   min?: number;
   max?: number;
   pattern?: string;
-  matchesSchema?: "PaymentRequired" | "PaymentPayload" | "SettlementResponse" | "VerifyResponse" | "SupportedResponse";
+  matchesSchema?:
+    "PaymentRequired" | "PaymentPayload" | "SettlementResponse" | "VerifyResponse" | "SupportedResponse";
 }
 
 export interface Modification {

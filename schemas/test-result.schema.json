@@ -5,7 +5,17 @@
   "description": "The outcome of running one test definition against one implementation.",
   "type": "object",
   "additionalProperties": false,
-  "required": ["testId", "title", "role", "severity", "advisory", "status", "durationMs", "startedAt", "assertions"],
+  "required": [
+    "testId",
+    "title",
+    "role",
+    "severity",
+    "advisory",
+    "status",
+    "durationMs",
+    "startedAt",
+    "assertions"
+  ],
   "properties": {
     "testId": { "type": "string", "pattern": "^(SRV|FAC|CLI)-[0-9]{2}$" },
     "title": { "type": "string" },

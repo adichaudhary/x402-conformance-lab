@@ -95,7 +95,10 @@
       },
       "allOf": [
         {
-          "if": { "properties": { "errorReason": { "const": "settlement_pending" } }, "required": ["errorReason"] },
+          "if": {
+            "properties": { "errorReason": { "const": "settlement_pending" } },
+            "required": ["errorReason"]
+          },
           "then": { "properties": { "transaction": { "type": "string", "minLength": 1 } } }
         }
       ]

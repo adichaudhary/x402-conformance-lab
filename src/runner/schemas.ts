@@ -29,7 +29,13 @@ let ajvInstance: Ajv2020 | undefined;
 /** One shared Ajv instance with every schema in schemas/ registered. */
 export function getAjv(): Ajv2020 {
   if (ajvInstance) return ajvInstance;
-  const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false, strictTypes: false, allowUnionTypes: true });
+  const ajv = new Ajv2020({
+    allErrors: true,
+    strict: true,
+    strictRequired: false,
+    strictTypes: false,
+    allowUnionTypes: true,
+  });
   addFormats(ajv);
   ajv.addSchema(loadJson("test-definition.schema.json"));
   ajv.addSchema(loadJson("test-result.schema.json"));
