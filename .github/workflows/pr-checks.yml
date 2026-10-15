@@ -1,0 +1,40 @@
+name: PR checks
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize]
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  linked-issue:
+    name: Linked issue
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require a linked issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: |
+          # Dependency bumps from Dependabot don't have issues.
+          if [ "$AUTHOR" = "dependabot[bot]" ]; then
+            echo "Dependabot PR, no issue needed."; exit 0
+          fi
+          owner="${REPO%/*}"; name="${REPO#*/}"
+          count=$(gh api graphql -F owner="$owner" -F name="$name" -F pr="$PR" -f query='
+            query($owner: String!, $name: String!, $pr: Int!) {
+              repository(owner: $owner, name: $name) {
+                pullRequest(number: $pr) { closingIssuesReferences(first: 10) { totalCount } }
+              }
+            }' --jq '.data.repository.pullRequest.closingIssuesReferences.totalCount')
+          if [ "$count" -gt 0 ]; then
+            echo "Linked to $count issue(s)."
+          else
+            echo "::error::This PR is not linked to an issue. Add 'Closes #<number>' to the PR description, or link one in the Development sidebar."
+            exit 1
+          fi

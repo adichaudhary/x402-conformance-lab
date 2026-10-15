@@ -1,0 +1,141 @@
+name: Conformance run
+
+# Runs the suite against every implementation we can start in CI and
+# publishes a compatibility grid in the job summary (RFC section 4).
+# Implementation failures do not fail this workflow. Only broken setup does.
+
+on:
+  schedule:
+    - cron: "0 14 * * 1" # Mondays 14:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: conformance
+  cancel-in-progress: false
+
+env:
+  # Keep in sync with src/version.ts and docs/SPEC_VERSION.md.
+  X402_SPEC_COMMIT: e95b06661e1a2a8a9a21fce34cc28b9934834650
+
+jobs:
+  mock:
+    name: local-mock-server
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Start mock server
+        run: |
+          npm run mock:server > mock.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://localhost:4402/health && exit 0; sleep 1; done
+          cat mock.log; exit 1
+
+      - name: Run suite
+        run: npm run cli -- run --config configs/implementations/local-mock-server.json --out reports/local-mock-server.json || true
+
+      - name: Require a report
+        run: test -f reports/local-mock-server.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-local-mock-server
+          path: reports/local-mock-server.json
+
+  official-typescript:
+    name: official-typescript-hono
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/checkout@v4
+        with:
+          repository: x402-foundation/x402
+          ref: ${{ env.X402_SPEC_COMMIT }}
+          path: upstream
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Build the official Hono example
+        working-directory: upstream/examples/typescript
+        run: |
+          corepack enable
+          export COREPACK_ENABLE_DOWNLOAD_PROMPT=0
+          pnpm install --filter "@x402/hono-server-example..."
+          pnpm --filter "@x402/hono-server-example^..." run build
+
+      - name: Start the official Hono example
+        working-directory: upstream/examples/typescript/servers/hono
+        run: |
+          # Public example addresses from the spec. No private keys are needed for unpaid tests.
+          cat > .env <<'EOF'
+          EVM_ADDRESS=0x209693Bc6afc0C5328bA36FaF03C514EF312287C
+          SVM_ADDRESS=CKPKJWNdJEqa81x7CkZ14BVPiY6y16Sxs7owznqtWYp5
+          FACILITATOR_URL=https://x402.org/facilitator
+          EOF
+          pnpm dev > server.log 2>&1 &
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:4021/weather || true)
+            [ "$code" = "402" ] && exit 0
+            sleep 2
+          done
+          echo "Server did not start"; cat server.log; exit 1
+
+      - name: Run suite
+        run: npm run cli -- run --config configs/implementations/official-typescript-hono.json --out reports/official-typescript-hono.json || true
+
+      - name: Require a report
+        run: test -f reports/official-typescript-hono.json
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report-official-typescript-hono
+          path: reports/official-typescript-hono.json
+
+  grid:
+    name: Compatibility grid
+    runs-on: ubuntu-latest
+    needs: [mock, official-typescript]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: report-*
+          path: reports
+          merge-multiple: true
+
+      - name: Build grid
+        run: |
+          echo "## x402 compatibility grid" >> "$GITHUB_STEP_SUMMARY"
+          npm run -s grid -- reports grid.md
+          cat grid.md >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compatibility-grid
+          path: |
+            grid.md
+            reports/

@@ -11,6 +11,23 @@ npm run check   # lint, format, typecheck, unit tests, catalog validation
 
 Node.js 20 or later.
 
+## How changes get into main
+
+Nobody pushes to `main` directly. Every change goes through a pull request that is linked to an issue.
+
+1. **Start from an issue.** Find one or open one, and assign yourself.
+2. **Make a branch** named after the issue: `git checkout -b 6-srv-06-underpayment`.
+3. **Commit and push your branch**, then open a PR. Put `Closes #6` (your issue number) at the top of the description. The PR template has a spot for it.
+4. **Wait for the checks.** The PR can't merge until all of these are green:
+   - `Check (Node 20)` and `Check (Node 22)`: lint, format, typecheck, unit tests, catalog validation, build
+   - `Windows smoke test`
+   - `End to end (CLI vs mock server)`
+   - `Linked issue`: fails if the PR doesn't close an issue
+5. **Get one approving review** from a teammate and resolve every review comment.
+6. **Merge.** The linked issue closes automatically.
+
+If a check fails, push more commits to the same branch. The PR updates itself.
+
 ## Adding a test
 
 1. **Pick the test.** Every test in the v1 catalog has a GitHub issue (labels `role:*`, `severity:*`, `priority:*`). Assign yourself before you start so two people don't write the same one.
@@ -30,7 +47,7 @@ Node.js 20 or later.
    npm run validate:catalog
    ```
 
-5. **Open a PR** using the checklist below.
+5. **Open a PR** that says `Closes #<issue>`, using the checklist below.
 
 ## Mapping a test to the spec
 

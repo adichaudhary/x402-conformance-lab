@@ -2,20 +2,31 @@ name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   check:
+    name: Check (Node ${{ matrix.node }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 22]
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node }}
           cache: npm
 
       - run: npm ci
@@ -34,3 +45,61 @@ jobs:
 
       - name: Validate test catalog
         run: npm run validate:catalog
+
+      - name: Build
+        run: npm run build
+
+      - name: Check the npm package contents
+        if: matrix.node == 22
+        run: npm pack --dry-run
+
+  windows:
+    name: Windows smoke test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run validate:catalog
+
+  e2e:
+    name: End to end (CLI vs mock server)
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Start mock server
+        run: |
+          npm run mock:server > mock.log 2>&1 &
+          for i in $(seq 1 30); do
+            curl -sf http://localhost:4402/health && exit 0
+            sleep 1
+          done
+          echo "Mock server did not start"; cat mock.log; exit 1
+
+      - name: Run SRV-01 with the built CLI
+        run: node dist/cli/index.js run --config configs/implementations/local-mock-server.json --test SRV-01 --out reports/e2e-mock.json
+
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: reports/
+          if-no-files-found: ignore
