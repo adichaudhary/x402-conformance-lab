@@ -13,7 +13,7 @@ Node.js 20 or later.
 
 ## How changes get into main
 
-Nobody pushes to `main` directly. Every change goes through a pull request that is linked to an issue.
+Contributors don't push to `main` directly. Every change goes through a pull request that is linked to an issue.
 
 1. **Start from an issue.** Find one or open one, and assign yourself.
 2. **Make a branch** named after the issue: `git checkout -b 6-srv-06-underpayment`.

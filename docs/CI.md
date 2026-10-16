@@ -17,11 +17,11 @@ Everything runs on GitHub Actions. The workflows live in `.github/workflows/`.
 
 `main` is protected by the ruleset in [`.github/rulesets/main.json`](../.github/rulesets/main.json):
 
-- No direct pushes. Changes land only through pull requests.
+- No direct pushes for contributors. Their changes land only through pull requests.
 - Each PR needs 1 approving review, and all review threads must be resolved. A new push dismisses earlier approvals.
 - These checks must pass: `Check (Node 20)`, `Check (Node 22)`, `Windows smoke test`, `End to end (CLI vs mock server)`, `Linked issue`.
 - No force pushes, and `main` can't be deleted.
-- Repository admins may merge a PR without waiting for approval (bypass mode "pull request only"). They still can't push to `main` directly.
+- Repository admins (currently only @adichaudhary) bypass these rules and can push to `main` directly. Everyone with write access (contributors) must go through a PR. To give someone else this power, make them an admin. To take it away from yourself, change `bypass_mode` in the ruleset to `pull_request`.
 
 To change the rules, edit the JSON and reapply it:
 
