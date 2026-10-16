@@ -46,7 +46,7 @@ jobs:
       - name: Require a report
         run: test -f reports/local-mock-server.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: report-local-mock-server
           path: reports/local-mock-server.json
@@ -101,7 +101,7 @@ jobs:
       - name: Require a report
         run: test -f reports/official-typescript-hono.json
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: report-official-typescript-hono
           path: reports/official-typescript-hono.json
@@ -133,7 +133,7 @@ jobs:
           npm run -s grid -- reports grid.md
           cat grid.md >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: compatibility-grid
           path: |
