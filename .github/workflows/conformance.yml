@@ -25,7 +25,7 @@ jobs:
     name: local-mock-server
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -55,9 +55,9 @@ jobs:
     name: official-typescript-hono
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: x402-foundation/x402
           ref: ${{ env.X402_SPEC_COMMIT }}
@@ -112,7 +112,7 @@ jobs:
     needs: [mock, official-typescript]
     if: always()
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
