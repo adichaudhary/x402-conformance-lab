@@ -14,10 +14,16 @@ import {
 const srv01 = loadCatalog().tests.find((t) => t.id === "SRV-01")!;
 let server: ServerType | undefined;
 
+
+
 afterEach(() => {
   server?.close();
   server = undefined;
 });
+
+
+
+
 
 async function runAgainstMock(faults: MockServerFault[] = []) {
   const app = createMockServer({ faults });
@@ -35,6 +41,11 @@ async function runAgainstMock(faults: MockServerFault[] = []) {
   return { report, result: report.results[0]! };
 }
 
+
+
+
+
+
 describe("SRV-01 against the mock server", () => {
   it("passes against a correct server", async () => {
     const { report, result } = await runAgainstMock();
@@ -50,7 +61,7 @@ describe("SRV-01 against the mock server", () => {
     ["wrong-version", "payment-required-valid"],
     ["empty-accepts", "payment-required-valid"],
     ["not-base64", "payment-required-valid"],
-  ])("fails when the server has fault %s", async (fault, failingAssertion) => {
+  ])("fails when the server has fault %s", async (fault: MockServerFault, failingAssertion: string) => {
     const { report, result } = await runAgainstMock([fault]);
     expect(result.status).toBe("FAIL");
     expect(result.assertions.find((a) => a.id === failingAssertion)?.status).toBe("FAIL");
