@@ -14,16 +14,10 @@ import {
 const srv01 = loadCatalog().tests.find((t) => t.id === "SRV-01")!;
 let server: ServerType | undefined;
 
-
-
 afterEach(() => {
   server?.close();
   server = undefined;
 });
-
-
-
-
 
 async function runAgainstMock(faults: MockServerFault[] = []) {
   const app = createMockServer({ faults });
@@ -40,11 +34,6 @@ async function runAgainstMock(faults: MockServerFault[] = []) {
   const report = await runTests([srv01], config);
   return { report, result: report.results[0]! };
 }
-
-
-
-
-
 
 describe("SRV-01 against the mock server", () => {
   it("passes against a correct server", async () => {
