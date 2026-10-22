@@ -20,10 +20,14 @@
     "check": "npm run lint && npm run format:check && npm run typecheck && npm test && npm run validate:catalog",
     "mock:server": "tsx src/mocks/server/main.ts",
     "grid": "tsx scripts/compat-grid.ts",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "chain:setup": "bash scripts/setup-local.sh",
+    "facilitator": "tsx src/facilitator/main.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",
+    "@x402/core": "^2.28.0",
+    "@x402/evm": "^2.28.0",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "commander": "^15.0.0",
@@ -32,9 +36,11 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",
+    "@openzeppelin/contracts": "^5.7.0",
     "@types/node": "^22.20.5",
     "eslint": "^9.39.5",
     "eslint-config-prettier": "^10.1.8",
+    "forge-std": "github:foundry-rs/forge-std#v1.17.0",
     "prettier": "^3.9.10",
     "tsx": "^4.23.15",
     "typescript": "~6.0.0",
