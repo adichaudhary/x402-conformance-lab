@@ -1,0 +1,21 @@
+{
+  "$schema": "../../schemas/implementation-config.schema.json",
+  "name": "official-go-gin",
+  "displayName": "Official x402 Go Gin example server",
+  "version": "x402-foundation/x402@e95b066 examples/go/servers/gin",
+  "role": "server",
+  "url": "http://localhost:4021",
+  "resource": {
+    "path": "/weather",
+    "method": "GET",
+    "paidContentMarker": "\"weather\":\"foggy\""
+  },
+  "features": [
+    "scheme:exact",
+    "network:eip155:84532",
+    "network:solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1",
+    "chain:testnet"
+  ],
+  "wallet": { "privateKeyEnv": "X402_TEST_PRIVATE_KEY" },
+  "notes": "Needs EVM_PAYEE_ADDRESS, SVM_PAYEE_ADDRESS and FACILITATOR_URL set in the example's .env. See docs/running-official-example.md."
+}
