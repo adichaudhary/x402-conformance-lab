@@ -235,7 +235,7 @@ export async function createPaymentSignature(
         to: requirement.payTo,
         value: requirement.amount,
         validAfter: validAfter.toString(),
-        validBefore: (validAfter + BigInt(requirement.maxTimeoutSeconds)).toString(),
+        validBefore: (now + BigInt(requirement.maxTimeoutSeconds)).toString(),
         nonce: `0x${randomBytes(32).toString("hex")}`,
       },
     },
