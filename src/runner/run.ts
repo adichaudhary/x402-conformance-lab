@@ -1,7 +1,18 @@
+import { getAddress, type Address } from "viem";
 import { SPEC_COMMIT, SUITE_VERSION } from "../version.js";
 import { evaluateAssertion, type StepResponse } from "./assertions.js";
+import { readErc20Balance } from "./chain.js";
 import { missingFeatures, type ImplementationConfig } from "./config.js";
+import { decodeBase64Json } from "./expect.js";
+import { createPaymentSignature, signingAccount, type SignedPayment } from "./payment.js";
 import type { AssertionResult, Step, TestDefinition, TestResult } from "./types.js";
+
+export interface RunnerDeps {
+  /** ERC-20 `balanceOf`. Defaults to Anvil at `X402_RPC_URL` or `http://127.0.0.1:8545`. */
+  balanceOf?: (asset: Address, account: Address) => Promise<bigint>;
+  /** Used for `waitForSettlementMs`. Defaults to a real delay. */
+  sleep?: (ms: number) => Promise<void>;
+}
 
 export interface Report {
   suiteVersion: string;
@@ -23,11 +34,120 @@ class SetupError extends Error {
   }
 }
 
-async function sendStep(step: Step, config: ImplementationConfig, sent: Map<string, string>) {
+interface ResolvedDeps {
+  balanceOf: (asset: Address, account: Address) => Promise<bigint>;
+  sleep: (ms: number) => Promise<void>;
+}
+
+function resolveDeps(deps?: RunnerDeps): ResolvedDeps {
+  return {
+    balanceOf: deps?.balanceOf ?? readErc20Balance,
+    sleep: deps?.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms))),
+  };
+}
+
+async function request(
+  url: URL,
+  method: string,
+  headers: Record<string, string>,
+  timeoutMs: number,
+  stepId: string,
+): Promise<Response> {
+  try {
+    return await fetch(url, {
+      method,
+      headers,
+      signal: AbortSignal.timeout(timeoutMs),
+      redirect: "manual",
+    });
+  } catch (err) {
+    const cause = (err as Error & { cause?: Error }).cause;
+    throw new SetupError(`request to ${url} failed: ${cause?.message ?? (err as Error).message}`, stepId);
+  }
+}
+
+async function fetchPaymentRequired(
+  url: URL,
+  method: string,
+  timeoutMs: number,
+  stepId: string,
+): Promise<unknown> {
+  const response = await request(url, method, { Accept: "application/json" }, timeoutMs, stepId);
+  const header = response.headers.get("payment-required");
+  await response.text();
+  if (!header) {
+    throw new SetupError(
+      `no PAYMENT-REQUIRED header to build a payment from (status ${response.status})`,
+      stepId,
+    );
+  }
+  const decoded = decodeBase64Json(header);
+  if (!decoded.ok) throw new SetupError(`PAYMENT-REQUIRED: ${decoded.error}`, stepId);
+  return decoded.value;
+}
+
+function stepIdOf(def: TestDefinition, step: string | undefined): string {
+  return step ?? def.input.steps[def.input.steps.length - 1]!.id;
+}
+
+/** Accounts named by this step's balanceDelta assertions, and the token to read. */
+function balanceReads(
+  def: TestDefinition,
+  stepId: string,
+  payer: Address,
+  payTo: string,
+  asset: string,
+): { accounts: Map<string, Address>; asset: Address } {
+  const accounts = new Map<string, Address>();
+  const assets = new Set<string>();
+  for (const a of def.assertions) {
+    if (a.target !== "onchain" || a.measure !== "balanceDelta" || stepIdOf(def, a.step) !== stepId) continue;
+    if (a.asset) assets.add(a.asset);
+    if (a.account === "facilitator") {
+      throw new SetupError("facilitator balance checks are not implemented yet", stepId);
+    }
+    if (a.account === "payer") accounts.set("payer", payer);
+    else if (a.account === "payTo") accounts.set("payTo", getAddress(payTo));
+    else accounts.set(a.account, getAddress(a.account));
+  }
+  if (assets.size > 1)
+    throw new SetupError("on-chain assertions for this step name different assets", stepId);
+  return { accounts, asset: getAddress([...assets][0] ?? asset) };
+}
+
+async function snapshotBalances(
+  accounts: Map<string, Address>,
+  asset: Address,
+  balanceOf: ResolvedDeps["balanceOf"],
+  stepId: string,
+): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  for (const [name, account] of accounts) {
+    try {
+      out[name] = (await balanceOf(asset, account)).toString();
+    } catch (err) {
+      throw new SetupError(`balance of ${name} (${account}) failed: ${(err as Error).message}`, stepId);
+    }
+  }
+  return out;
+}
+
+async function sendStep(
+  step: Step,
+  def: TestDefinition,
+  config: ImplementationConfig,
+  sent: Map<string, string>,
+  deps: ResolvedDeps,
+) {
   if ((step.concurrency ?? 1) > 1) {
     throw new SetupError("concurrent steps are not implemented yet", step.id);
   }
   const headers: Record<string, string> = { Accept: "application/json" };
+  const path = step.path ?? config.resource?.path ?? "/";
+  const url = new URL(path, config.url);
+  const method = step.method ?? config.resource?.method ?? "GET";
+  const timeoutMs = config.requestTimeoutMs ?? 10_000;
+  let signed: SignedPayment | undefined;
   const p = step.payment;
   switch (p.mode) {
     case "none":
@@ -43,38 +163,53 @@ async function sendStep(step: Step, config: ImplementationConfig, sent: Map<stri
       break;
     }
     case "valid":
-    case "modified":
-      throw new SetupError(
-        `payment mode "${p.mode}" needs payment signing, which is not implemented yet`,
-        step.id,
-      );
+    case "modified": {
+      const required = await fetchPaymentRequired(url, method, timeoutMs, step.id);
+      try {
+        signed = await createPaymentSignature(required, p, signingAccount(config.wallet?.privateKeyEnv));
+      } catch (err) {
+        throw new SetupError((err as Error).message, step.id);
+      }
+      headers["PAYMENT-SIGNATURE"] = signed.header;
+      break;
+    }
   }
   if (headers["PAYMENT-SIGNATURE"]) sent.set(step.id, headers["PAYMENT-SIGNATURE"]);
 
-  const path = step.path ?? config.resource?.path ?? "/";
-  const url = new URL(path, config.url);
-  const method = step.method ?? config.resource?.method ?? "GET";
-  let response: Response;
-  try {
-    response = await fetch(url, {
-      method,
-      headers,
-      signal: AbortSignal.timeout(config.requestTimeoutMs ?? 10_000),
-      redirect: "manual",
-    });
-  } catch (err) {
-    const cause = (err as Error & { cause?: Error }).cause;
-    throw new SetupError(`request to ${url} failed: ${cause?.message ?? (err as Error).message}`, step.id);
+  const wantsBalances = def.assertions.some(
+    (a) => a.target === "onchain" && a.measure === "balanceDelta" && stepIdOf(def, a.step) === step.id,
+  );
+  if (wantsBalances && !signed) {
+    throw new SetupError("on-chain checks need a signed payment to identify payer and payTo", step.id);
   }
+  const reads = signed
+    ? balanceReads(def, step.id, signed.payer, signed.requirement.payTo, signed.requirement.asset)
+    : undefined;
+  const before =
+    reads && reads.accounts.size > 0
+      ? await snapshotBalances(reads.accounts, reads.asset, deps.balanceOf, step.id)
+      : undefined;
+
+  const response = await request(url, method, headers, timeoutMs, step.id);
+  if (before && step.waitForSettlementMs) await deps.sleep(step.waitForSettlementMs);
+  const after = before
+    ? await snapshotBalances(reads!.accounts, reads!.asset, deps.balanceOf, step.id)
+    : undefined;
+
   const recorded: StepResponse = {
     status: response.status,
     headers: Object.fromEntries([...response.headers].map(([k, v]) => [k.toLowerCase(), v])),
     body: await response.text(),
+    ...(before && after ? { balances: { before, after } } : {}),
   };
   return recorded;
 }
 
-export async function runTest(def: TestDefinition, config: ImplementationConfig): Promise<TestResult> {
+export async function runTest(
+  def: TestDefinition,
+  config: ImplementationConfig,
+  deps?: RunnerDeps,
+): Promise<TestResult> {
   const startedAt = new Date();
   const t0 = performance.now();
   const base = {
@@ -109,7 +244,7 @@ export async function runTest(def: TestDefinition, config: ImplementationConfig)
   const sent = new Map<string, string>();
   try {
     for (const step of def.input.steps) {
-      responses.set(step.id, await sendStep(step, config, sent));
+      responses.set(step.id, await sendStep(step, def, config, sent, resolveDeps(deps)));
     }
   } catch (err) {
     const e = err as SetupError;
@@ -151,10 +286,14 @@ export async function runTest(def: TestDefinition, config: ImplementationConfig)
   return done({ status: "PASS", assertions, ...(warnings.length > 0 ? { warnings } : {}) });
 }
 
-export async function runTests(tests: TestDefinition[], config: ImplementationConfig): Promise<Report> {
+export async function runTests(
+  tests: TestDefinition[],
+  config: ImplementationConfig,
+  deps?: RunnerDeps,
+): Promise<Report> {
   const startedAt = new Date().toISOString();
   const results: TestResult[] = [];
-  for (const t of tests) results.push(await runTest(t, config));
+  for (const t of tests) results.push(await runTest(t, config, deps));
   const count = (pred: (r: TestResult) => boolean) => results.filter(pred).length;
   return {
     suiteVersion: SUITE_VERSION,

@@ -6,7 +6,8 @@ import { Hono } from "hono";
  * It implements the handshake from specs/transports-v2/http.md: unpaid requests
  * get 402 with a base64 PAYMENT-REQUIRED header, and undecodable payments get
  * 400. It does not verify or settle payments yet. That needs the local chain
- * and a facilitator. Any decodable payment gets 402 with an explanatory error.
+ * and a facilitator. Any decodable payment gets 402 with an explanatory error,
+ * unless a fault says otherwise.
  *
  * `faults` make it misbehave on purpose so tests can prove the runner catches it.
  */
@@ -19,7 +20,12 @@ export type MockServerFault =
   | "decimal-amount" // amount "0.01" instead of atomic units
   | "wrong-version" // x402Version 1
   | "empty-accepts" // accepts: []
-  | "not-base64"; // PAYMENT-REQUIRED is raw JSON, not base64
+  | "not-base64" // PAYMENT-REQUIRED is raw JSON, not base64
+  | "accept-payment" // 200 + paid content + PAYMENT-RESPONSE success: true
+  | "success-receipt" // 402, but PAYMENT-RESPONSE reports success
+  | "leak-paid-content" // 402 whose body contains the paid content
+  | "reject-as-400" // rejects the payment with 400 instead of 402
+  | "credit-payto"; // rejects, but adds 1 atomic unit to payTo in options.balances
 
 export interface MockServerOptions {
   path?: string;
@@ -29,6 +35,13 @@ export interface MockServerOptions {
   asset?: string;
   payTo?: string;
   faults?: MockServerFault[];
+  /** PAYMENT-SIGNATURE headers received, in order. Unpaid probes are not recorded. */
+  recordedPayments?: string[];
+  /**
+   * ERC-20 balances keyed by lower-cased address. The credit-payto fault adds 1
+   * atomic unit to payTo when a payment arrives, so a test can observe a delta.
+   */
+  balances?: Map<string, bigint>;
 }
 
 const DEFAULTS = {
@@ -73,19 +86,23 @@ export function createMockServer(options: MockServerOptions = {}) {
             asset: o.asset,
             payTo: o.payTo,
             maxTimeoutSeconds: 60,
-            extra: { name: "USDC", version: "2" },
+            extra: { name: "USDC", version: "2", assetTransferMethod: "eip3009" },
           },
         ],
   });
 
-  const respond402 = (url: string, error: string) => {
-    const headers: Record<string, string> = {};
+  const respond402 = (url: string, error: string, extraHeaders: Record<string, string> = {}, body = "{}") => {
+    const headers: Record<string, string> = { "Content-Type": "application/json", ...extraHeaders };
     if (!faults.has("omit-payment-required")) {
       const pr = paymentRequired(url, error);
       headers["PAYMENT-REQUIRED"] = faults.has("not-base64") ? JSON.stringify(pr) : encode(pr);
     }
-    return new Response("{}", { status: 402, headers: { "Content-Type": "application/json", ...headers } });
+    return new Response(body, { status: 402, headers });
   };
+
+  if (faults.has("credit-payto") && !options.balances) {
+    throw new Error("credit-payto fault requires options.balances");
+  }
 
   app.all(o.path, (c) => {
     const header = c.req.header("PAYMENT-SIGNATURE");
@@ -95,6 +112,34 @@ export function createMockServer(options: MockServerOptions = {}) {
         return c.json({ data: MOCK_PAID_CONTENT_MARKER });
       }
       return respond402(c.req.url, "PAYMENT-SIGNATURE header is required");
+    }
+
+    options.recordedPayments?.push(header);
+    if (faults.has("credit-payto")) {
+      const key = o.payTo.toLowerCase();
+      const balances = options.balances!;
+      balances.set(key, (balances.get(key) ?? 0n) + 1n);
+    }
+    if (faults.has("accept-payment")) {
+      return c.json({ data: MOCK_PAID_CONTENT_MARKER }, 200, {
+        "PAYMENT-RESPONSE": encode({ success: true }),
+      });
+    }
+    if (faults.has("success-receipt")) {
+      return respond402(c.req.url, "mock rejected the payment", {
+        "PAYMENT-RESPONSE": encode({ success: true }),
+      });
+    }
+    if (faults.has("leak-paid-content")) {
+      return respond402(
+        c.req.url,
+        "mock rejected the payment",
+        {},
+        JSON.stringify({ data: MOCK_PAID_CONTENT_MARKER }),
+      );
+    }
+    if (faults.has("reject-as-400")) {
+      return c.json({ error: "payment_failed" }, 400);
     }
 
     const payment = decodePayment(header);

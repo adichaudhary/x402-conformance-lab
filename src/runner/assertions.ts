@@ -7,6 +7,8 @@ export interface StepResponse {
   status: number;
   headers: Record<string, string>;
   body: string;
+  /** Atomic-unit balances keyed by the assertion account ("payer", "payTo", or an address). */
+  balances?: { before: Record<string, string>; after: Record<string, string> };
 }
 
 class NotEvaluable extends Error {}
@@ -89,8 +91,23 @@ export function evaluateAssertion(
       case "body":
         check = checkBody(a, res, config);
         break;
-      case "onchain":
-        throw new NotEvaluable("on-chain assertions are not implemented yet (needs the Anvil harness)");
+      case "onchain": {
+        if (a.measure !== "balanceDelta") {
+          throw new NotEvaluable("authorizationUsed is not implemented yet");
+        }
+        const snap = res.balances;
+        if (!snap) throw new NotEvaluable("no balance snapshot was taken for this step");
+        const before = snap.before[a.account];
+        const after = snap.after[a.account];
+        if (before === undefined || after === undefined) {
+          throw new NotEvaluable(`no balance was read for ${a.account}`);
+        }
+        const delta = (BigInt(after) - BigInt(before)).toString();
+        check = evaluateExpectation(delta, a.expect);
+        base.expected = a.expect;
+        base.actual = delta;
+        break;
+      }
     }
     return {
       ...base,
