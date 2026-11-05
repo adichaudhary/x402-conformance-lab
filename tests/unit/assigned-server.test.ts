@@ -65,13 +65,19 @@ const requirements = {
   ],
 };
 
+type AssignedServerTestId = "SRV-03" | "SRV-04" | "SRV-10" | "SRV-13" | "SRV-15" | "SRV-16";
 const catalog = loadCatalog().tests;
-const srv03 = catalog.find((test) => test.id === "SRV-03")!;
-const srv13 = catalog.find((test) => test.id === "SRV-13")!;
+const assignedTests = Object.fromEntries(
+  ["SRV-03", "SRV-04", "SRV-10", "SRV-13", "SRV-15", "SRV-16"].map((id) => [
+    id,
+    catalog.find((test) => test.id === id)!,
+  ]),
+) as Record<AssignedServerTestId, (typeof catalog)[number]>;
 let server: ServerType | undefined;
 
 beforeAll(() => {
   process.env.X402_TEST_PRIVATE_KEY = PAYER_KEY;
+  process.env.X402_TEST_OTHER_PRIVATE_KEY = OTHER_KEY;
 });
 
 afterEach(() => {
@@ -86,13 +92,13 @@ function runnerDeps(balances: Map<string, bigint>): RunnerDeps {
   };
 }
 
-async function runServerTest(testId: "SRV-03" | "SRV-13", fault: MockServerFault) {
+async function runServerTest(testId: AssignedServerTestId, faults: MockServerFault[] = []) {
   const payer = privateKeyToAccount(PAYER_KEY).address.toLowerCase();
   const balances = new Map<string, bigint>([
     [payer, 1000000n],
     [PAY_TO.toLowerCase(), 0n],
   ]);
-  const app = createMockServer({ faults: [fault], balances });
+  const app = createMockServer({ faults, balances });
   const port = await new Promise<number>((resolve) => {
     server = serve({ fetch: app.fetch, port: 0 }, (info: AddressInfo) => resolve(info.port));
   });
@@ -101,10 +107,13 @@ async function runServerTest(testId: "SRV-03" | "SRV-13", fault: MockServerFault
     role: "server",
     url: `http://localhost:${port}`,
     resource: { path: "/paid", paidContentMarker: MOCK_PAID_CONTENT_MARKER },
-    features: ["scheme:exact", "network:eip155:31337", "chain:local"],
-    wallet: { privateKeyEnv: "X402_TEST_PRIVATE_KEY" },
+    features: ["facilitator:configurable", "scheme:exact", "network:eip155:31337", "chain:local"],
+    wallet: {
+      privateKeyEnv: "X402_TEST_PRIVATE_KEY",
+      otherPrivateKeyEnv: "X402_TEST_OTHER_PRIVATE_KEY",
+    },
   });
-  const definition = testId === "SRV-03" ? srv03 : srv13;
+  const definition = assignedTests[testId];
   const report = await runTests([definition], config, runnerDeps(balances));
   return { report, result: report.results[0]! };
 }
@@ -138,18 +147,46 @@ async function recover(payload: SignedPayload): Promise<Address> {
 
 describe("assigned server tests", () => {
   it("SRV-03 validates a successful receipt and exact balance deltas", async () => {
-    const { report, result } = await runServerTest("SRV-03", "accept-payment");
+    const { report, result } = await runServerTest("SRV-03", ["accept-payment"]);
+    expect(result.status).toBe("PASS");
+    expect(result.assertions.every((assertion) => assertion.status === "PASS")).toBe(true);
+    expect(validateReport(report)).toEqual([]);
+  });
+
+  it("SRV-04 rejects every malformed payment without paid content", async () => {
+    const { report, result } = await runServerTest("SRV-04");
+    expect(result.status).toBe("PASS");
+    expect(result.assertions.every((assertion) => assertion.status === "PASS")).toBe(true);
+    expect(validateReport(report)).toEqual([]);
+  });
+
+  it("SRV-10 rejects altered and wrong-key signatures without moving funds", async () => {
+    const { report, result } = await runServerTest("SRV-10");
     expect(result.status).toBe("PASS");
     expect(result.assertions.every((assertion) => assertion.status === "PASS")).toBe(true);
     expect(validateReport(report)).toEqual([]);
   });
 
   it("SRV-13 reuses payment metadata while snapshotting the replay", async () => {
-    const { report, result } = await runServerTest("SRV-13", "accept-first-payment");
+    const { report, result } = await runServerTest("SRV-13", ["accept-first-payment"]);
     expect(result.status).toBe("PASS");
     expect(result.assertions.find((assertion) => assertion.id === "replay-payto-unchanged")?.status).toBe(
       "PASS",
     );
+    expect(validateReport(report)).toEqual([]);
+  });
+
+  it("SRV-15 returns no paid data when facilitator verification is invalid", async () => {
+    const { report, result } = await runServerTest("SRV-15");
+    expect(result.status).toBe("PASS");
+    expect(result.assertions.every((assertion) => assertion.status === "PASS")).toBe(true);
+    expect(validateReport(report)).toEqual([]);
+  });
+
+  it("SRV-16 returns a schema-valid failure receipt when settlement fails", async () => {
+    const { report, result } = await runServerTest("SRV-16", ["settlement-failure"]);
+    expect(result.status).toBe("PASS");
+    expect(result.assertions.every((assertion) => assertion.status === "PASS")).toBe(true);
     expect(validateReport(report)).toEqual([]);
   });
 });

@@ -23,6 +23,7 @@ export type MockServerFault =
   | "not-base64" // PAYMENT-REQUIRED is raw JSON, not base64
   | "accept-payment" // 200 + paid content + PAYMENT-RESPONSE success: true
   | "accept-first-payment" // accept the first payment, then reject later payments (replay test)
+  | "settlement-failure" // 402 + PAYMENT-RESPONSE success: false with an error reason
   | "success-receipt" // 402, but PAYMENT-RESPONSE reports success
   | "leak-paid-content" // 402 whose body contains the paid content
   | "reject-as-400" // rejects the payment with 400 instead of 402
@@ -139,6 +140,16 @@ export function createMockServer(options: MockServerOptions = {}) {
         "PAYMENT-RESPONSE": encode({
           success: true,
           transaction: "0xmock-settlement",
+          network: o.network,
+        }),
+      });
+    }
+    if (faults.has("settlement-failure")) {
+      return respond402(c.req.url, "settlement failed", {
+        "PAYMENT-RESPONSE": encode({
+          success: false,
+          errorReason: "insufficient_funds",
+          transaction: "",
           network: o.network,
         }),
       });
