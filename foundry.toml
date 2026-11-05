@@ -1,0 +1,15 @@
+[profile.default]
+src = "contracts/src"
+test = "contracts/test"
+script = "contracts/script"
+out = "contracts/out"
+cache_path = "contracts/cache"
+libs = ["node_modules"]
+solc_version = "0.8.30"
+remappings = [
+  "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/",
+  "forge-std/=node_modules/forge-std/src/",
+]
+
+[lint]
+exclude_lints = ["asm-keccak256"]
