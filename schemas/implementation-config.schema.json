@@ -61,6 +61,33 @@
         "privateKeyEnv": {
           "type": "string",
           "pattern": "^[A-Z][A-Z0-9_]*$"
+        },
+        "otherPrivateKeyEnv": {
+          "description": "Environment variable containing a second test key, used for wrong-signer test cases.",
+          "type": "string",
+          "pattern": "^[A-Z][A-Z0-9_]*$"
+        }
+      }
+    },
+    "facilitator": {
+      "description": "Fixture used to build signed /verify and /settle requests when testing a facilitator.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["paymentRequirements"],
+      "properties": {
+        "paymentRequirements": {
+          "type": "object",
+          "additionalProperties": true,
+          "required": ["scheme", "network", "amount", "asset", "payTo", "maxTimeoutSeconds"],
+          "properties": {
+            "scheme": { "type": "string", "minLength": 1 },
+            "network": { "type": "string", "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$" },
+            "amount": { "type": "string", "pattern": "^(0|[1-9][0-9]*)$" },
+            "asset": { "type": "string", "minLength": 1 },
+            "payTo": { "type": "string", "minLength": 1 },
+            "maxTimeoutSeconds": { "type": "number", "exclusiveMinimum": 0 },
+            "extra": { "type": "object" }
+          }
         }
       }
     },

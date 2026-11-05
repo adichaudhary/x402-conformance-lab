@@ -199,6 +199,14 @@ async function signAuthorization(payload: PaymentPayload, account: PrivateKeyAcc
   });
 }
 
+function flipSignatureByte(signature: Hex): Hex {
+  if (!/^0x[0-9a-fA-F]{130}$/.test(signature)) {
+    throw new Error("cannot flip a byte in a non-standard ECDSA signature");
+  }
+  const firstByte = Number.parseInt(signature.slice(2, 4), 16) ^ 1;
+  return `0x${firstByte.toString(16).padStart(2, "0")}${signature.slice(4)}` as Hex;
+}
+
 export function signingAccount(privateKeyEnv: string | undefined): PrivateKeyAccount {
   if (!privateKeyEnv) throw new Error("config has no wallet.privateKeyEnv, so payments can't be signed");
   const raw = process.env[privateKeyEnv];
@@ -219,6 +227,7 @@ export async function createPaymentSignature(
   required: unknown,
   spec: PaymentSpec,
   account: PrivateKeyAccount,
+  otherAccount?: PrivateKeyAccount,
 ): Promise<SignedPayment> {
   const paymentRequired = paymentRequiredFrom(required);
   const requirement = selectRequirement(paymentRequired.accepts, spec.select);
@@ -243,9 +252,16 @@ export async function createPaymentSignature(
 
   const modifications = spec.mode === "modified" ? (spec.modifications ?? []) : [];
   const signing = spec.signing ?? "after-modifications";
-  if (signing === "before-modifications") await signAuthorization(payload, account);
+  const signer = spec.signatureVariant === "different-key" ? otherAccount : account;
+  if (!signer) {
+    throw new Error("signatureVariant different-key needs wallet.otherPrivateKeyEnv");
+  }
+  if (signing === "before-modifications") await signAuthorization(payload, signer);
   for (const mod of modifications) applyModification(payload, mod);
-  if (signing === "after-modifications") await signAuthorization(payload, account);
+  if (signing === "after-modifications") await signAuthorization(payload, signer);
+  if (spec.signatureVariant === "flip-byte") {
+    payload.payload.signature = flipSignatureByte(payload.payload.signature);
+  }
 
   const header = Buffer.from(JSON.stringify(payload), "utf8").toString("base64");
   return { header, requirement, payer: account.address };

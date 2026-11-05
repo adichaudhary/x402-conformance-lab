@@ -55,6 +55,12 @@ export function evaluateExpectation(actual: unknown, expect: Expectation): Check
   if ("equals" in expect && !deepEqual(actual, expect.equals)) {
     failures.push(`expected ${show(expect.equals)}, got ${show(actual)}`);
   }
+  if (
+    expect.equalsIgnoreCase !== undefined &&
+    !(typeof actual === "string" && actual.toLowerCase() === expect.equalsIgnoreCase.toLowerCase())
+  ) {
+    failures.push(`expected ${show(expect.equalsIgnoreCase)} ignoring case, got ${show(actual)}`);
+  }
   if ("notEquals" in expect && deepEqual(actual, expect.notEquals)) {
     failures.push(`expected anything but ${show(expect.notEquals)}`);
   }

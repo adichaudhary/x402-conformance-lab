@@ -52,11 +52,13 @@ async function request(
   headers: Record<string, string>,
   timeoutMs: number,
   stepId: string,
+  body?: string,
 ): Promise<Response> {
   try {
     return await fetch(url, {
       method,
       headers,
+      body,
       signal: AbortSignal.timeout(timeoutMs),
       redirect: "manual",
     });
@@ -137,6 +139,7 @@ async function sendStep(
   def: TestDefinition,
   config: ImplementationConfig,
   sent: Map<string, string>,
+  signedPayments: Map<string, SignedPayment>,
   deps: ResolvedDeps,
 ) {
   if ((step.concurrency ?? 1) > 1) {
@@ -148,6 +151,7 @@ async function sendStep(
   const method = step.method ?? config.resource?.method ?? "GET";
   const timeoutMs = config.requestTimeoutMs ?? 10_000;
   let signed: SignedPayment | undefined;
+  let requestBody: string | undefined;
   const p = step.payment;
   switch (p.mode) {
     case "none":
@@ -160,21 +164,56 @@ async function sendStep(
       if (prior === undefined)
         throw new SetupError(`step "${p.replayOf}" sent no payment to replay`, step.id);
       headers["PAYMENT-SIGNATURE"] = prior;
+      signed = signedPayments.get(p.replayOf!);
       break;
     }
     case "valid":
     case "modified": {
-      const required = await fetchPaymentRequired(url, method, timeoutMs, step.id);
+      let required: unknown;
+      if (def.role === "facilitator") {
+        const requirement = config.facilitator?.paymentRequirements;
+        if (!requirement) {
+          throw new SetupError(
+            "facilitator payment tests need config.facilitator.paymentRequirements",
+            step.id,
+          );
+        }
+        required = {
+          x402Version: 2,
+          resource: { url: url.toString() },
+          accepts: [requirement],
+        };
+      } else {
+        required = await fetchPaymentRequired(url, method, timeoutMs, step.id);
+      }
       try {
-        signed = await createPaymentSignature(required, p, signingAccount(config.wallet?.privateKeyEnv));
+        const payer = signingAccount(config.wallet?.privateKeyEnv);
+        const other =
+          p.signatureVariant === "different-key"
+            ? signingAccount(config.wallet?.otherPrivateKeyEnv)
+            : undefined;
+        signed = await createPaymentSignature(required, p, payer, other);
       } catch (err) {
         throw new SetupError((err as Error).message, step.id);
       }
-      headers["PAYMENT-SIGNATURE"] = signed.header;
+      if (def.role === "facilitator") {
+        const paymentPayload: unknown = JSON.parse(Buffer.from(signed.header, "base64").toString("utf8"));
+        requestBody = JSON.stringify({
+          x402Version: 2,
+          paymentPayload,
+          paymentRequirements: signed.requirement,
+        });
+        headers["Content-Type"] = "application/json";
+      } else {
+        headers["PAYMENT-SIGNATURE"] = signed.header;
+      }
       break;
     }
   }
-  if (headers["PAYMENT-SIGNATURE"]) sent.set(step.id, headers["PAYMENT-SIGNATURE"]);
+  if (signed) {
+    sent.set(step.id, signed.header);
+    signedPayments.set(step.id, signed);
+  } else if (headers["PAYMENT-SIGNATURE"]) sent.set(step.id, headers["PAYMENT-SIGNATURE"]);
 
   const wantsBalances = def.assertions.some(
     (a) => a.target === "onchain" && a.measure === "balanceDelta" && stepIdOf(def, a.step) === step.id,
@@ -190,7 +229,7 @@ async function sendStep(
       ? await snapshotBalances(reads.accounts, reads.asset, deps.balanceOf, step.id)
       : undefined;
 
-  const response = await request(url, method, headers, timeoutMs, step.id);
+  const response = await request(url, method, headers, timeoutMs, step.id, requestBody);
   if (before && step.waitForSettlementMs) await deps.sleep(step.waitForSettlementMs);
   const after = before
     ? await snapshotBalances(reads!.accounts, reads!.asset, deps.balanceOf, step.id)
@@ -200,6 +239,15 @@ async function sendStep(
     status: response.status,
     headers: Object.fromEntries([...response.headers].map(([k, v]) => [k.toLowerCase(), v])),
     body: await response.text(),
+    ...(signed
+      ? {
+          payment: {
+            payer: signed.payer,
+            network: signed.requirement.network,
+            amount: signed.requirement.amount,
+          },
+        }
+      : {}),
     ...(before && after ? { balances: { before, after } } : {}),
   };
   return recorded;
@@ -242,9 +290,10 @@ export async function runTest(
   const lastStep = def.input.steps[def.input.steps.length - 1]!.id;
   const responses = new Map<string, StepResponse>();
   const sent = new Map<string, string>();
+  const signedPayments = new Map<string, SignedPayment>();
   try {
     for (const step of def.input.steps) {
-      responses.set(step.id, await sendStep(step, def, config, sent, resolveDeps(deps)));
+      responses.set(step.id, await sendStep(step, def, config, sent, signedPayments, resolveDeps(deps)));
     }
   } catch (err) {
     const e = err as SetupError;

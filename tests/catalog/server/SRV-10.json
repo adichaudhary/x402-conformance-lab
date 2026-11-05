@@ -1,0 +1,210 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-10",
+  "title": "Invalid or altered signatures are rejected",
+  "role": "server",
+  "specArea": "signature-validation",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact_evm.md?plain=1#L75-L81",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L597"
+  ],
+  "severity": "critical",
+  "priority": "P0",
+  "advisory": false,
+  "requires": ["scheme:exact", "network:eip155", "chain:local"],
+  "input": {
+    "scenario": "Try a flipped signature byte, a signature made by another key while authorization.from stays the payer, and an authorization changed after signing.",
+    "setup": {
+      "facilitator": "verifying",
+      "chain": "local",
+      "payerFunding": "1000000000"
+    },
+    "steps": [
+      {
+        "id": "flipped-byte",
+        "payment": {
+          "mode": "valid",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" },
+          "signatureVariant": "flip-byte"
+        },
+        "waitForSettlementMs": 3000
+      },
+      {
+        "id": "different-key",
+        "payment": {
+          "mode": "valid",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" },
+          "signatureVariant": "different-key"
+        },
+        "waitForSettlementMs": 3000
+      },
+      {
+        "id": "changed-after-signing",
+        "payment": {
+          "mode": "modified",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" },
+          "modifications": [{ "path": "/payload/authorization/validBefore", "op": "subtract", "value": "1" }],
+          "signing": "before-modifications"
+        },
+        "waitForSettlementMs": 3000
+      }
+    ]
+  },
+  "expectedBehavior": "All three signature failures are rejected without paid content, a successful receipt, or any payer or payTo balance change. The transport maps payment verification failures to 402.",
+  "assertions": [
+    {
+      "id": "flipped-not-2xx",
+      "target": "httpStatus",
+      "step": "flipped-byte",
+      "description": "The flipped signature is rejected.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "flipped-status-402",
+      "target": "httpStatus",
+      "step": "flipped-byte",
+      "level": "should",
+      "description": "The flipped signature returns 402.",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "flipped-no-success-receipt",
+      "target": "header",
+      "step": "flipped-byte",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "The flipped signature has no successful receipt.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "flipped-no-paid-content",
+      "target": "body",
+      "step": "flipped-byte",
+      "check": "paidContentAbsent",
+      "description": "The flipped signature returns no paid content."
+    },
+    {
+      "id": "flipped-payto-unchanged",
+      "target": "onchain",
+      "step": "flipped-byte",
+      "measure": "balanceDelta",
+      "account": "payTo",
+      "description": "The flipped signature moves no funds.",
+      "expect": { "equals": "0" }
+    },
+    {
+      "id": "flipped-payer-unchanged",
+      "target": "onchain",
+      "step": "flipped-byte",
+      "measure": "balanceDelta",
+      "account": "payer",
+      "description": "The flipped signature does not debit the payer.",
+      "expect": { "equals": "0" }
+    },
+    {
+      "id": "other-not-2xx",
+      "target": "httpStatus",
+      "step": "different-key",
+      "description": "A signature from another key is rejected.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "other-status-402",
+      "target": "httpStatus",
+      "step": "different-key",
+      "level": "should",
+      "description": "A signature from another key returns 402.",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "other-no-success-receipt",
+      "target": "header",
+      "step": "different-key",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "A signature from another key has no successful receipt.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "other-no-paid-content",
+      "target": "body",
+      "step": "different-key",
+      "check": "paidContentAbsent",
+      "description": "A signature from another key returns no paid content."
+    },
+    {
+      "id": "other-payto-unchanged",
+      "target": "onchain",
+      "step": "different-key",
+      "measure": "balanceDelta",
+      "account": "payTo",
+      "description": "A signature from another key moves no funds.",
+      "expect": { "equals": "0" }
+    },
+    {
+      "id": "other-payer-unchanged",
+      "target": "onchain",
+      "step": "different-key",
+      "measure": "balanceDelta",
+      "account": "payer",
+      "description": "A signature from another key does not debit the payer.",
+      "expect": { "equals": "0" }
+    },
+    {
+      "id": "changed-not-2xx",
+      "target": "httpStatus",
+      "step": "changed-after-signing",
+      "description": "An authorization changed after signing is rejected.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "changed-status-402",
+      "target": "httpStatus",
+      "step": "changed-after-signing",
+      "level": "should",
+      "description": "An authorization changed after signing returns 402.",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "changed-no-success-receipt",
+      "target": "header",
+      "step": "changed-after-signing",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "An authorization changed after signing has no successful receipt.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "changed-no-paid-content",
+      "target": "body",
+      "step": "changed-after-signing",
+      "check": "paidContentAbsent",
+      "description": "An authorization changed after signing returns no paid content."
+    },
+    {
+      "id": "changed-payto-unchanged",
+      "target": "onchain",
+      "step": "changed-after-signing",
+      "measure": "balanceDelta",
+      "account": "payTo",
+      "description": "An authorization changed after signing moves no funds.",
+      "expect": { "equals": "0" }
+    },
+    {
+      "id": "changed-payer-unchanged",
+      "target": "onchain",
+      "step": "changed-after-signing",
+      "measure": "balanceDelta",
+      "account": "payer",
+      "description": "An authorization changed after signing does not debit the payer.",
+      "expect": { "equals": "0" }
+    }
+  ],
+  "notes": "The different-key variant requires wallet.otherPrivateKeyEnv in the implementation config."
+}

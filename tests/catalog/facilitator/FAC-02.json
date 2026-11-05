@@ -1,0 +1,76 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "FAC-02",
+  "title": "Verify approves a valid payment and identifies the payer",
+  "role": "facilitator",
+  "specArea": "facilitator-api",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L305-L391",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L254-L269"
+  ],
+  "severity": "high",
+  "priority": "P0",
+  "advisory": false,
+  "requires": ["scheme:exact", "network:eip155", "chain:local"],
+  "input": {
+    "scenario": "POST a correctly signed exact EIP-3009 PaymentPayload and its matching PaymentRequirements to /verify.",
+    "setup": {
+      "facilitator": "verifying",
+      "chain": "local",
+      "payerFunding": "1000000000"
+    },
+    "steps": [
+      {
+        "id": "verify-valid",
+        "method": "POST",
+        "path": "/verify",
+        "payment": {
+          "mode": "valid",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" }
+        }
+      }
+    ]
+  },
+  "expectedBehavior": "The facilitator returns a valid VerifyResponse with isValid true. payer is optional; if present, it equals the authorization.from signer case-insensitively.",
+  "assertions": [
+    {
+      "id": "status-200",
+      "target": "httpStatus",
+      "description": "The verify request succeeds.",
+      "expect": { "equals": 200 }
+    },
+    {
+      "id": "verify-schema",
+      "target": "body",
+      "check": "json",
+      "description": "The response matches VerifyResponse.",
+      "expect": { "matchesSchema": "VerifyResponse" }
+    },
+    {
+      "id": "is-valid",
+      "target": "body",
+      "check": "json",
+      "path": "/isValid",
+      "description": "The valid payment is approved.",
+      "expect": { "equals": true }
+    },
+    {
+      "id": "payer-matches-signer",
+      "target": "body",
+      "check": "json",
+      "path": "/payer",
+      "passIfAbsent": true,
+      "description": "If payer is present, it equals authorization.from case-insensitively.",
+      "expect": { "equalsIgnoreCase": "${payment.payer}" }
+    },
+    {
+      "id": "payer-present",
+      "target": "body",
+      "check": "json",
+      "path": "/payer",
+      "level": "should",
+      "description": "The facilitator should identify the payer.",
+      "expect": { "equalsIgnoreCase": "${payment.payer}" }
+    }
+  ]
+}
