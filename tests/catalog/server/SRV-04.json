@@ -1,0 +1,139 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-04",
+  "title": "Malformed payment returns no paid data",
+  "role": "server",
+  "specArea": "error-cases",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L176-L186",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L600"
+  ],
+  "severity": "high",
+  "priority": "P0",
+  "advisory": true,
+  "advisoryReason": "The transport specifies 400 while the reference TypeScript server returns 402. The maintainer question is linked at https://github.com/adichaudhary/x402-conformance-lab/blob/main/docs/SPEC_AUDIT.md#questions-to-raise-with-the-maintainers.",
+  "requires": [],
+  "input": {
+    "scenario": "Send three malformed PAYMENT-SIGNATURE variants: invalid base64, base64 that is not JSON, and JSON missing required PaymentPayload fields.",
+    "setup": { "facilitator": "implementation", "chain": "none" },
+    "steps": [
+      {
+        "id": "not-base64",
+        "payment": { "mode": "raw", "rawHeader": "not-base64!!!" }
+      },
+      {
+        "id": "not-json",
+        "payment": { "mode": "raw", "rawHeader": "bm90IGpzb24=" }
+      },
+      {
+        "id": "missing-accepted",
+        "payment": {
+          "mode": "raw",
+          "rawHeader": "eyJ4NDAyVmVyc2lvbiI6MiwicGF5bG9hZCI6e319"
+        }
+      }
+    ]
+  },
+  "expectedBehavior": "Every malformed payment is rejected without paid content or a successful PAYMENT-RESPONSE. The transport recommends HTTP 400, but that status is advisory because the reference server returns 402.",
+  "assertions": [
+    {
+      "id": "base64-not-2xx",
+      "target": "httpStatus",
+      "step": "not-base64",
+      "description": "Invalid base64 is rejected.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "base64-status-400",
+      "target": "httpStatus",
+      "step": "not-base64",
+      "level": "should",
+      "description": "Invalid base64 returns the transport's recommended 400.",
+      "expect": { "equals": 400 }
+    },
+    {
+      "id": "base64-no-success-receipt",
+      "target": "header",
+      "step": "not-base64",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "Invalid base64 has no successful receipt.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "base64-no-paid-content",
+      "target": "body",
+      "step": "not-base64",
+      "check": "paidContentAbsent",
+      "description": "Invalid base64 returns no paid content."
+    },
+    {
+      "id": "json-not-2xx",
+      "target": "httpStatus",
+      "step": "not-json",
+      "description": "Base64 non-JSON is rejected.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "json-status-400",
+      "target": "httpStatus",
+      "step": "not-json",
+      "level": "should",
+      "description": "Base64 non-JSON returns the transport's recommended 400.",
+      "expect": { "equals": 400 }
+    },
+    {
+      "id": "json-no-success-receipt",
+      "target": "header",
+      "step": "not-json",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "Base64 non-JSON has no successful receipt.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "json-no-paid-content",
+      "target": "body",
+      "step": "not-json",
+      "check": "paidContentAbsent",
+      "description": "Base64 non-JSON returns no paid content."
+    },
+    {
+      "id": "fields-not-2xx",
+      "target": "httpStatus",
+      "step": "missing-accepted",
+      "description": "JSON missing accepted is rejected.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "fields-status-400",
+      "target": "httpStatus",
+      "step": "missing-accepted",
+      "level": "should",
+      "description": "JSON missing accepted returns the transport's recommended 400.",
+      "expect": { "equals": 400 }
+    },
+    {
+      "id": "fields-no-success-receipt",
+      "target": "header",
+      "step": "missing-accepted",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "JSON missing accepted has no successful receipt.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "fields-no-paid-content",
+      "target": "body",
+      "step": "missing-accepted",
+      "check": "paidContentAbsent",
+      "description": "JSON missing accepted returns no paid content."
+    }
+  ]
+}

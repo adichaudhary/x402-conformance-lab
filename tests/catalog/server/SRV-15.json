@@ -1,0 +1,69 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-15",
+  "title": "Invalid facilitator verification returns no paid data",
+  "role": "server",
+  "specArea": "payment-validation",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L36-L45",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L283-L299"
+  ],
+  "severity": "critical",
+  "priority": "P0",
+  "advisory": false,
+  "requires": ["facilitator:configurable", "scheme:exact", "network:eip155"],
+  "input": {
+    "scenario": "Point the server at a mock facilitator whose /verify returns isValid false with an invalidReason, then send a correctly formed payment.",
+    "setup": {
+      "facilitator": "mock",
+      "chain": "none",
+      "mockFacilitator": {
+        "verify": {
+          "status": 200,
+          "body": { "isValid": false, "invalidReason": "invalid_signature" }
+        }
+      }
+    },
+    "steps": [
+      {
+        "id": "invalid-verification",
+        "payment": {
+          "mode": "valid",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" }
+        }
+      }
+    ]
+  },
+  "expectedBehavior": "The server does not execute or return the paid resource when /verify reports isValid false. It rejects the request, preferably with HTTP 402.",
+  "assertions": [
+    {
+      "id": "not-2xx",
+      "target": "httpStatus",
+      "description": "The request is not answered with a success status.",
+      "expect": { "notOneOf": [200, 201, 202, 203, 204, 206] }
+    },
+    {
+      "id": "status-402",
+      "target": "httpStatus",
+      "level": "should",
+      "description": "A failed verification returns 402.",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "no-success-receipt",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "passIfAbsent": true,
+      "description": "No PAYMENT-RESPONSE reports success.",
+      "expect": { "notEquals": true }
+    },
+    {
+      "id": "no-paid-content",
+      "target": "body",
+      "check": "paidContentAbsent",
+      "description": "The paid content is not returned."
+    }
+  ]
+}

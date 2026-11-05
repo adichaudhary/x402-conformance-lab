@@ -1,0 +1,100 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-03",
+  "title": "Valid payment returns paid content and a settlement receipt",
+  "role": "server",
+  "specArea": "settlement",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L111-L140",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L225-L252"
+  ],
+  "severity": "critical",
+  "priority": "P0",
+  "advisory": false,
+  "requires": ["scheme:exact", "network:eip155", "chain:local"],
+  "input": {
+    "scenario": "Send a correctly signed exact EIP-3009 payment and measure both payer and payTo balances across settlement.",
+    "setup": {
+      "facilitator": "verifying",
+      "chain": "local",
+      "payerFunding": "1000000000"
+    },
+    "steps": [
+      {
+        "id": "valid-payment",
+        "description": "Pay the advertised exact requirement with a fresh authorization.",
+        "payment": {
+          "mode": "valid",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" }
+        },
+        "waitForSettlementMs": 3000
+      }
+    ]
+  },
+  "expectedBehavior": "The server returns HTTP 200 and paid content. PAYMENT-RESPONSE is a successful settlement for the selected network, and exactly the advertised amount moves from payer to payTo.",
+  "assertions": [
+    {
+      "id": "status-200",
+      "target": "httpStatus",
+      "description": "A valid payment succeeds with HTTP 200.",
+      "expect": { "equals": 200 }
+    },
+    {
+      "id": "paid-content-present",
+      "target": "body",
+      "check": "paidContentPresent",
+      "description": "The paid content is returned."
+    },
+    {
+      "id": "receipt-valid",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "description": "PAYMENT-RESPONSE matches the SettlementResponse schema.",
+      "expect": { "matchesSchema": "SettlementResponse" }
+    },
+    {
+      "id": "receipt-success",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "description": "The settlement receipt reports success.",
+      "expect": { "equals": true }
+    },
+    {
+      "id": "receipt-transaction",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/transaction",
+      "description": "The settlement receipt includes a non-empty transaction identifier.",
+      "expect": { "pattern": "^.+$" }
+    },
+    {
+      "id": "receipt-network",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/network",
+      "description": "The settlement receipt names the network that was paid.",
+      "expect": { "equals": "${payment.network}" }
+    },
+    {
+      "id": "payto-received-exact-amount",
+      "target": "onchain",
+      "measure": "balanceDelta",
+      "account": "payTo",
+      "description": "payTo gains exactly the advertised amount.",
+      "expect": { "equals": "${payment.amount}" }
+    },
+    {
+      "id": "payer-spent-exact-amount",
+      "target": "onchain",
+      "measure": "balanceDelta",
+      "account": "payer",
+      "description": "The payer loses exactly the advertised amount.",
+      "expect": { "equals": "-${payment.amount}" }
+    }
+  ]
+}

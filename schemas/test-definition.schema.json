@@ -232,6 +232,11 @@
           "enum": ["after-modifications", "before-modifications"],
           "default": "after-modifications"
         },
+        "signatureVariant": {
+          "description": "How to produce the signature: valid, flip one signature byte after signing, or sign with wallet.otherPrivateKeyEnv while keeping authorization.from as the payer.",
+          "enum": ["valid", "flip-byte", "different-key"],
+          "default": "valid"
+        },
         "rawHeader": { "type": "string" },
         "replayOf": {
           "description": "Step id whose PAYMENT-SIGNATURE header is resent unchanged.",
@@ -285,6 +290,7 @@
       "minProperties": 1,
       "properties": {
         "equals": {},
+        "equalsIgnoreCase": { "type": "string" },
         "notEquals": {},
         "oneOf": { "type": "array", "minItems": 1 },
         "notOneOf": { "type": "array", "minItems": 1 },
@@ -397,10 +403,15 @@
         "precondition": true,
         "check": {
           "description": "paidContentAbsent: the body does not contain the paid-content marker from the implementation config. paidContentPresent: it does. json: parse as JSON and compare with expect.",
-          "enum": ["paidContentAbsent", "paidContentPresent", "json"]
+          "enum": ["paidContentAbsent", "paidContentPresent", "json", "configuredKinds", "allKindsV2"]
         },
         "path": { "$ref": "#/$defs/jsonPointer" },
-        "expect": { "$ref": "#/$defs/expectation" }
+        "expect": { "$ref": "#/$defs/expectation" },
+        "passIfAbsent": {
+          "description": "For a JSON path, pass when the field is absent. Used for optional response fields with conditional requirements.",
+          "type": "boolean",
+          "default": false
+        }
       },
       "unevaluatedProperties": false
     },

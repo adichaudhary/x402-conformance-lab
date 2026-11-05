@@ -1,0 +1,84 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-16",
+  "title": "Settlement failure returns 402 and a failure receipt",
+  "role": "server",
+  "specArea": "settlement",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/transports-v2/http.md?plain=1#L142-L162",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L225-L252"
+  ],
+  "severity": "high",
+  "priority": "P0",
+  "advisory": false,
+  "requires": ["facilitator:configurable", "scheme:exact", "network:eip155"],
+  "input": {
+    "scenario": "Point the server at a mock facilitator whose /verify approves the payment but whose /settle returns success false with an errorReason.",
+    "setup": {
+      "facilitator": "mock",
+      "chain": "none",
+      "mockFacilitator": {
+        "verify": { "status": 200, "body": { "isValid": true } },
+        "settle": {
+          "status": 200,
+          "body": {
+            "success": false,
+            "errorReason": "insufficient_funds",
+            "transaction": "",
+            "network": "eip155:31337"
+          }
+        }
+      }
+    },
+    "steps": [
+      {
+        "id": "failed-settlement",
+        "payment": {
+          "mode": "valid",
+          "select": { "scheme": "exact", "assetTransferMethod": "eip3009" }
+        }
+      }
+    ]
+  },
+  "expectedBehavior": "The server returns HTTP 402 without paid content and includes a PAYMENT-RESPONSE that matches SettlementResponse, reports success false, and gives an errorReason.",
+  "assertions": [
+    {
+      "id": "status-402",
+      "target": "httpStatus",
+      "description": "Settlement failure returns 402.",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "no-paid-content",
+      "target": "body",
+      "check": "paidContentAbsent",
+      "description": "The paid content is not returned."
+    },
+    {
+      "id": "failure-receipt-valid",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "description": "The failure receipt matches SettlementResponse.",
+      "expect": { "matchesSchema": "SettlementResponse" }
+    },
+    {
+      "id": "failure-receipt-success-false",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/success",
+      "description": "The failure receipt reports success false.",
+      "expect": { "equals": false }
+    },
+    {
+      "id": "failure-receipt-reason",
+      "target": "header",
+      "name": "PAYMENT-RESPONSE",
+      "decode": "base64json",
+      "path": "/errorReason",
+      "description": "The failure receipt includes a non-empty errorReason.",
+      "expect": { "pattern": "^.+$" }
+    }
+  ]
+}
