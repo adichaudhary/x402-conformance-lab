@@ -22,6 +22,8 @@ export async function readErc20Balance(asset: Address, account: Address): Promis
       args: [account],
     });
   } catch (err) {
-    throw new Error(`reading ${account} balance of ${asset} at ${rpc} failed: ${(err as Error).message}`);
+    throw new Error(`reading ${account} balance of ${asset} at ${rpc} failed: ${(err as Error).message}`, {
+      cause: err,
+    });
   }
 }
