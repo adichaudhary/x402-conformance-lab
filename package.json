@@ -27,7 +27,7 @@
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "commander": "^15.0.0",
-    "hono": "^4.13.13",
+    "hono": "^4.13.14",
     "viem": "^2.57.7"
   },
   "devDependencies": {
