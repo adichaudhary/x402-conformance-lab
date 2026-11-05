@@ -1,10 +1,12 @@
 # Outreach drafts
 
-Drafts for the design partner plan in RFC section 9. Each message is under 120 words. Fill in the repo link before sending. Nothing here has been sent.
+Drafts for the design partner plan in RFC section 9. Sent 2026-11-04 from @adichaudhary, no assignees.
 
 ---
 
-## x402 maintainers (GitHub Discussion in x402-foundation/x402)
+## x402 maintainers + spec questions (issue; Discussions are off on that repo)
+
+Sent: https://github.com/x402-foundation/x402/issues/4145
 
 **Title:** Open-source conformance suite for x402 V2, plus 5 spec questions
 
@@ -18,6 +20,8 @@ Would you look at those questions? We'd also love to run the alpha against the o
 
 ## x402-rs (Rust)
 
+Sent: https://github.com/x402-rs/x402-rs/issues/144
+
 Hi. We're building an open-source conformance suite for x402 V2 at Purdue, and we'd like x402-rs to be one of our first outside implementations.
 
 The suite plays the client and facilitator against your server, then checks things like underpayment, wrong recipient, expired authorizations, and replayed payments. Results include on-chain balance checks on a local Anvil chain.
@@ -27,6 +31,8 @@ Would you run our alpha against x402-rs and tell us what breaks, in our tool or 
 ---
 
 ## x402-rails (Quicknode)
+
+Sent: https://github.com/quiknode-labs/x402-rails/issues/25
 
 Hi. We're a Purdue team building an open-source conformance suite for x402 V2, and we'd like to include x402-rails.
 
@@ -38,6 +44,8 @@ Would you be open to running our alpha against x402-rails? You'd see results pri
 
 ## Mogami (Java library and facilitator)
 
+Sent: https://github.com/mogami-tech/x402-facilitator/issues/172
+
 Hi. We're building an open-source conformance suite for x402 V2 at Purdue. Mogami is interesting to us because it covers two roles: a Java library and a facilitator.
 
 For the facilitator we'd check /supported, that /verify doesn't consume a payment, that settlement moves exactly the required amount to payTo, and that settling twice fails. For the library we'd run the server tests.
@@ -47,6 +55,8 @@ Could we run our alpha against your public test endpoint and share the results w
 ---
 
 ## PayAI (facilitator)
+
+Sent: https://github.com/PayAINetwork/x402-solana/issues/64
 
 Hi. We're a Purdue team building an open-source conformance suite for x402 V2. We'd like to include PayAI's facilitator in our first round of testing.
 
@@ -58,6 +68,8 @@ Would you be OK with us running the alpha against your public test endpoint? You
 
 ## Dexter (facilitator)
 
+Sent: https://github.com/Dexter-DAO/dexter-x402-sdk/issues/97
+
 Hi. We're building an open-source conformance suite for x402 V2 at Purdue, and we'd like Dexter to be one of the facilitators we test against.
 
 We check the facilitator API end to end: /supported lists what you actually accept, /verify is read-only, settlement moves the exact amount, and double settlement fails. Each test links to the spec line it checks, so any failure points at something concrete.
@@ -67,6 +79,8 @@ Could we run our alpha against your public test endpoint? Results go to you priv
 ---
 
 ## Corbits (facilitator)
+
+Sent: https://github.com/faremeter/faremeter/issues/177
 
 Hi. We're a Purdue team building an open-source conformance suite for x402 V2. Corbits is on our list of facilitators with public test endpoints, and we'd like to include you.
 
