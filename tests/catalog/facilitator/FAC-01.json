@@ -1,0 +1,52 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "FAC-01",
+  "title": "Supported reports schemes, networks, extensions, and signers",
+  "role": "facilitator",
+  "specArea": "facilitator-api",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L439-L492",
+  "severity": "high",
+  "priority": "P0",
+  "advisory": false,
+  "requires": [],
+  "input": {
+    "scenario": "Request the facilitator's public capability document.",
+    "setup": { "chain": "none" },
+    "steps": [
+      {
+        "id": "supported",
+        "method": "GET",
+        "path": "/supported",
+        "payment": { "mode": "none" }
+      }
+    ]
+  },
+  "expectedBehavior": "GET /supported returns a SupportedResponse with kinds, extensions, and signers. Every configured scheme and network is advertised, and all V2 kinds use x402Version 2.",
+  "assertions": [
+    {
+      "id": "status-200",
+      "target": "httpStatus",
+      "description": "The supported endpoint succeeds.",
+      "expect": { "equals": 200 }
+    },
+    {
+      "id": "supported-schema",
+      "target": "body",
+      "check": "json",
+      "description": "The response matches SupportedResponse.",
+      "expect": { "matchesSchema": "SupportedResponse" }
+    },
+    {
+      "id": "configured-kinds-present",
+      "target": "body",
+      "check": "configuredKinds",
+      "description": "Every scheme and network declared in the implementation config appears in kinds."
+    },
+    {
+      "id": "v2-kinds",
+      "target": "body",
+      "check": "allKindsV2",
+      "description": "Every advertised kind in this V2 suite has x402Version 2."
+    }
+  ]
+}

@@ -9,6 +9,7 @@ export type AssertionLevel = "must" | "should";
 
 export interface Expectation {
   equals?: unknown;
+  equalsIgnoreCase?: string;
   notEquals?: unknown;
   oneOf?: unknown[];
   notOneOf?: unknown[];
@@ -30,6 +31,7 @@ export interface PaymentSpec {
   select?: { scheme?: string; network?: string; assetTransferMethod?: string };
   modifications?: Modification[];
   signing?: "after-modifications" | "before-modifications";
+  signatureVariant?: "valid" | "flip-byte" | "different-key";
   rawHeader?: string;
   replayOf?: string;
 }
@@ -69,9 +71,10 @@ export interface HeaderAssertion extends AssertionBase {
 
 export interface BodyAssertion extends AssertionBase {
   target: "body";
-  check: "paidContentAbsent" | "paidContentPresent" | "json";
+  check: "paidContentAbsent" | "paidContentPresent" | "json" | "configuredKinds" | "allKindsV2";
   path?: string;
   expect?: Expectation;
+  passIfAbsent?: boolean;
 }
 
 export interface OnchainAssertion extends AssertionBase {

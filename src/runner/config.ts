@@ -15,7 +15,18 @@ export interface ImplementationConfig {
     paidContentMarker?: string;
   };
   features: string[];
-  wallet?: { privateKeyEnv: string };
+  wallet?: { privateKeyEnv: string; otherPrivateKeyEnv?: string };
+  facilitator?: {
+    paymentRequirements: {
+      scheme: string;
+      network: string;
+      amount: string;
+      asset: string;
+      payTo: string;
+      maxTimeoutSeconds: number;
+      extra?: Record<string, unknown>;
+    };
+  };
   requestTimeoutMs?: number;
   notes?: string;
 }

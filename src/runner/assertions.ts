@@ -9,9 +9,33 @@ export interface StepResponse {
   body: string;
   /** Atomic-unit balances keyed by the assertion account ("payer", "payTo", or an address). */
   balances?: { before: Record<string, string>; after: Record<string, string> };
+  payment?: { payer: string; network: string; amount: string };
 }
 
 class NotEvaluable extends Error {}
+
+function resolveExpectation(a: Assertion, res: StepResponse) {
+  if (!("expect" in a) || !a.expect) return undefined;
+  const values: Record<string, string> = {
+    "payment.payer": res.payment?.payer ?? "${payment.payer}",
+    "payment.network": res.payment?.network ?? "${payment.network}",
+    "payment.amount": res.payment?.amount ?? "${payment.amount}",
+  };
+  const visit = (value: unknown): unknown => {
+    if (typeof value === "string") {
+      return value.replace(
+        /\$\{(payment\.(?:payer|network|amount))\}/g,
+        (_match, key: string) => values[key]!,
+      );
+    }
+    if (Array.isArray(value)) return value.map(visit);
+    if (value !== null && typeof value === "object") {
+      return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, visit(item)]));
+    }
+    return value;
+  };
+  return visit(a.expect) as typeof a.expect;
+}
 
 function checkHeader(a: HeaderAssertion, res: StepResponse): Check {
   const raw = res.headers[a.name.toLowerCase()];
@@ -37,10 +61,55 @@ function checkHeader(a: HeaderAssertion, res: StepResponse): Check {
     }
     value = found.value;
   }
-  return evaluateExpectation(value, a.expect);
+  return evaluateExpectation(value, resolveExpectation(a, res)!);
 }
 
 function checkBody(a: BodyAssertion, res: StepResponse, config: ImplementationConfig): Check {
+  if (a.check === "configuredKinds" || a.check === "allKindsV2") {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(res.body);
+    } catch {
+      return { ok: false, message: "body is not JSON" };
+    }
+    if (!parsed || typeof parsed !== "object" || !Array.isArray((parsed as { kinds?: unknown }).kinds)) {
+      return { ok: false, message: "body has no kinds array" };
+    }
+    const kinds = (parsed as { kinds: unknown[] }).kinds;
+    if (a.check === "allKindsV2") {
+      const bad = kinds.find(
+        (kind) => !kind || typeof kind !== "object" || (kind as { x402Version?: unknown }).x402Version !== 2,
+      );
+      return bad === undefined
+        ? { ok: true }
+        : { ok: false, message: "one or more supported kinds do not use x402Version 2" };
+    }
+    const schemes = config.features
+      .filter((feature) => feature.startsWith("scheme:"))
+      .map((feature) => feature.slice("scheme:".length));
+    const networks = config.features
+      .filter((feature) => feature.startsWith("network:"))
+      .map((feature) => feature.slice("network:".length));
+    const records = kinds.filter(
+      (kind): kind is { scheme?: unknown; network?: unknown } => kind !== null && typeof kind === "object",
+    );
+    const missingSchemes = schemes.filter((scheme) => !records.some((kind) => kind.scheme === scheme));
+    const missingNetworks = networks.filter(
+      (network) =>
+        !records.some(
+          (kind) =>
+            typeof kind.network === "string" &&
+            (kind.network === network || (!network.includes(":") && kind.network.startsWith(`${network}:`))),
+        ),
+    );
+    const missing = [
+      ...missingSchemes.map((v) => `scheme:${v}`),
+      ...missingNetworks.map((v) => `network:${v}`),
+    ];
+    return missing.length === 0
+      ? { ok: true }
+      : { ok: false, message: `kinds is missing configured features: ${missing.join(", ")}` };
+  }
   if (a.check === "json") {
     let parsed: unknown;
     try {
@@ -49,8 +118,12 @@ function checkBody(a: BodyAssertion, res: StepResponse, config: ImplementationCo
       return { ok: false, message: "body is not JSON" };
     }
     const found = a.path ? getPointer(parsed, a.path) : { found: true, value: parsed };
-    if (!found.found) return { ok: false, message: `body has no value at ${a.path}` };
-    return a.expect ? evaluateExpectation(found.value, a.expect) : { ok: true };
+    if (!found.found) {
+      return a.passIfAbsent
+        ? { ok: true, message: `body has no value at ${a.path}` }
+        : { ok: false, message: `body has no value at ${a.path}` };
+    }
+    return a.expect ? evaluateExpectation(found.value, resolveExpectation(a, res)!) : { ok: true };
   }
   const marker = config.resource?.paidContentMarker;
   if (!marker) {
@@ -81,7 +154,7 @@ export function evaluateAssertion(
     let check: Check;
     switch (a.target) {
       case "httpStatus":
-        check = evaluateExpectation(res.status, a.expect);
+        check = evaluateExpectation(res.status, resolveExpectation(a, res)!);
         base.expected = a.expect;
         base.actual = res.status;
         break;
@@ -103,7 +176,7 @@ export function evaluateAssertion(
           throw new NotEvaluable(`no balance was read for ${a.account}`);
         }
         const delta = (BigInt(after) - BigInt(before)).toString();
-        check = evaluateExpectation(delta, a.expect);
+        check = evaluateExpectation(delta, resolveExpectation(a, res)!);
         base.expected = a.expect;
         base.actual = delta;
         break;

@@ -76,9 +76,9 @@ The JSON report matches [`schemas/report.schema.json`](schemas/report.schema.jso
 
 ### Test your own implementation
 
-Copy a file from `configs/implementations/`, point `url` and `resource.path` at your server, set `paidContentMarker` to a string that only appears in the paid response, and list your `features`. The config is validated against [`schemas/implementation-config.schema.json`](schemas/implementation-config.schema.json). The wallet key is read from the environment variable named in `wallet.privateKeyEnv` and is never stored in the config.
+Copy a file from `configs/implementations/`, point `url` and `resource.path` at your server, set `paidContentMarker` to a string that only appears in the paid response, and list your `features`. The config is validated against [`schemas/implementation-config.schema.json`](schemas/implementation-config.schema.json). Wallet keys are read from the environment variables named in `wallet.privateKeyEnv` (and optional `wallet.otherPrivateKeyEnv` for wrong-signer tests), never stored in the config. Facilitator payment tests also need a concrete `facilitator.paymentRequirements` fixture so the runner can build signed `/verify` and `/settle` bodies.
 
-Right now only SRV-01 runs end to end. Tests that need signed payments or on-chain checks report ERROR with "not implemented yet" until the payment signer and Anvil harness land.
+The runner can build exact EIP-3009 payments, exercise replay and invalid-signature cases, call facilitator `/supported` and `/verify`, and evaluate ERC-20 balance deltas. Tests that require a chain still need the configured implementation and local Anvil fixture to be running.
 
 Once published to npm: `npx x402-conformance run --config ./my-implementation.json`.
 

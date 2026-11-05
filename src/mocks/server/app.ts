@@ -22,6 +22,7 @@ export type MockServerFault =
   | "empty-accepts" // accepts: []
   | "not-base64" // PAYMENT-REQUIRED is raw JSON, not base64
   | "accept-payment" // 200 + paid content + PAYMENT-RESPONSE success: true
+  | "accept-first-payment" // accept the first payment, then reject later payments (replay test)
   | "success-receipt" // 402, but PAYMENT-RESPONSE reports success
   | "leak-paid-content" // 402 whose body contains the paid content
   | "reject-as-400" // rejects the payment with 400 instead of 402
@@ -71,6 +72,7 @@ export function createMockServer(options: MockServerOptions = {}) {
   const o = { ...DEFAULTS, ...options };
   const faults = new Set(options.faults ?? []);
   const app = new Hono();
+  let paymentCount = 0;
 
   const paymentRequired = (url: string, error: string) => ({
     x402Version: faults.has("wrong-version") ? 1 : 2,
@@ -115,14 +117,30 @@ export function createMockServer(options: MockServerOptions = {}) {
     }
 
     options.recordedPayments?.push(header);
+    paymentCount++;
+    const payment = decodePayment(header);
     if (faults.has("credit-payto")) {
       const key = o.payTo.toLowerCase();
       const balances = options.balances!;
       balances.set(key, (balances.get(key) ?? 0n) + 1n);
     }
-    if (faults.has("accept-payment")) {
+    if (faults.has("accept-payment") || (faults.has("accept-first-payment") && paymentCount === 1)) {
+      if (payment && options.balances) {
+        const accepted = payment.accepted as Record<string, unknown>;
+        const payload = payment.payload as Record<string, unknown>;
+        const authorization = payload.authorization as Record<string, unknown>;
+        const payer = String(authorization.from).toLowerCase();
+        const payTo = String(accepted.payTo).toLowerCase();
+        const amount = BigInt(String(authorization.value));
+        options.balances.set(payer, (options.balances.get(payer) ?? 0n) - amount);
+        options.balances.set(payTo, (options.balances.get(payTo) ?? 0n) + amount);
+      }
       return c.json({ data: MOCK_PAID_CONTENT_MARKER }, 200, {
-        "PAYMENT-RESPONSE": encode({ success: true }),
+        "PAYMENT-RESPONSE": encode({
+          success: true,
+          transaction: "0xmock-settlement",
+          network: o.network,
+        }),
       });
     }
     if (faults.has("success-receipt")) {
@@ -142,7 +160,6 @@ export function createMockServer(options: MockServerOptions = {}) {
       return c.json({ error: "payment_failed" }, 400);
     }
 
-    const payment = decodePayment(header);
     if (!payment) {
       // HTTP transport: "Invalid Payment: 400, malformed payment payload".
       return c.json({ error: "invalid_payload" }, 400);

@@ -73,6 +73,10 @@ Each step is one HTTP request (or `concurrency` identical requests sent at once)
 
 A modification is `{ "path": <JSON Pointer into the PaymentPayload>, "op": "set" | "delete" | "add" | "subtract", "value": ... }`. `add` and `subtract` do integer math on atomic-unit strings. `signing` decides whether the signature is computed after the modifications (`after-modifications`, the default, gives a valid signature over bad values) or before (`before-modifications`, gives a broken signature).
 
+`signatureVariant` defaults to `valid`. `flip-byte` corrupts one byte after signing. `different-key` signs with the key named by `wallet.otherPrivateKeyEnv` while leaving `authorization.from` set to the normal payer. The latter isolates the signer-recovery check from other authorization checks.
+
+For facilitator `valid` and `modified` steps, the runner sends the signed payload in the standard `/verify` or `/settle` JSON request body instead of a `PAYMENT-SIGNATURE` header. The implementation config supplies the fixture under `facilitator.paymentRequirements`.
+
 ## Assertions
 
 Every assertion has `id`, `target`, `description`, and optionally:
@@ -83,14 +87,14 @@ Every assertion has `id`, `target`, `description`, and optionally:
 
 There are four targets:
 
-| `target`     | Extra fields                                                  | Checks                                                                                                                                                     |
-| ------------ | ------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `httpStatus` | `expect`                                                      | The response status code                                                                                                                                   |
-| `header`     | `name`, `present`, `decode`, `path`, `expect`, `passIfAbsent` | A response header. `decode: "base64json"` decodes x402 headers. `path` is a JSON Pointer into the decoded value.                                           |
-| `body`       | `check`, `path`, `expect`                                     | `paidContentAbsent` / `paidContentPresent` look for the paid-content marker from the implementation config. `json` parses the body and compares at `path`. |
-| `onchain`    | `measure`, `account`, `asset`, `expect`                       | `balanceDelta` is the change in `account`'s token balance across the step. `account` is `payer`, `payTo`, `facilitator`, or an address.                    |
+| `target`     | Extra fields                                                  | Checks                                                                                                                                  |
+| ------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `httpStatus` | `expect`                                                      | The response status code                                                                                                                |
+| `header`     | `name`, `present`, `decode`, `path`, `expect`, `passIfAbsent` | A response header. `decode: "base64json"` decodes x402 headers. `path` is a JSON Pointer into the decoded value.                        |
+| `body`       | `check`, `path`, `expect`, `passIfAbsent`                     | Paid-content checks use the configured marker. `json` compares JSON at `path`. `configuredKinds` and `allKindsV2` check `/supported`.   |
+| `onchain`    | `measure`, `account`, `asset`, `expect`                       | `balanceDelta` is the change in `account`'s token balance across the step. `account` is `payer`, `payTo`, `facilitator`, or an address. |
 
-`expect` takes one or more of `equals`, `notEquals`, `oneOf`, `notOneOf`, `min`, `max`, `pattern`, `matchesSchema`. All of them must hold.
+`expect` takes one or more of `equals`, `equalsIgnoreCase`, `notEquals`, `oneOf`, `notOneOf`, `min`, `max`, `pattern`, `matchesSchema`. All of them must hold. Expected strings may use `${payment.payer}`, `${payment.network}`, or `${payment.amount}`; the runner resolves them from the payment sent in that step. This lets balance and receipt assertions compare against the selected requirement without hard-coding one implementation's values.
 
 ## Results
 
