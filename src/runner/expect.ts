@@ -49,9 +49,30 @@ export function decodeBase64Json(
 
 const show = (v: unknown) => JSON.stringify(v);
 
+/** What an expectation may need from the implementation config. */
+export interface ExpectContext {
+  /** Values of the config's network:* features, without the "network:" prefix. */
+  networks: string[];
+}
+
+/** "eip155" covers every eip155 network. "eip155:*" does the same. Anything else must match exactly. */
+export function networkSupported(network: unknown, declared: string[]): boolean {
+  if (typeof network !== "string") return false;
+  return declared.some((d) => {
+    if (d === network) return true;
+    if (d.endsWith(":*")) return network.startsWith(d.slice(0, -1));
+    return !d.includes(":") && network.startsWith(`${d}:`);
+  });
+}
+
 /** Every comparison listed in the expectation must hold. */
-export function evaluateExpectation(actual: unknown, expect: Expectation): Check {
+export function evaluateExpectation(actual: unknown, expect: Expectation, ctx?: ExpectContext): Check {
   const failures: string[] = [];
+  if (expect.supportedNetwork && !networkSupported(actual, ctx?.networks ?? [])) {
+    failures.push(
+      `expected a network the config supports (${show(ctx?.networks ?? [])}), got ${show(actual)}`,
+    );
+  }
   if ("equals" in expect && !deepEqual(actual, expect.equals)) {
     failures.push(`expected ${show(expect.equals)}, got ${show(actual)}`);
   }

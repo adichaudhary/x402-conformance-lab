@@ -297,6 +297,10 @@
         "min": { "type": "number" },
         "max": { "type": "number" },
         "pattern": { "type": "string", "format": "regex" },
+        "supportedNetwork": {
+          "description": "true: the value must be a network the implementation config declares. network:eip155:84532 matches that network, network:eip155 matches any eip155 network, and network:eip155:* matches the same.",
+          "const": true
+        },
         "matchesSchema": {
           "description": "Name of a schema in schemas/x402/, for example PaymentRequired.",
           "enum": [
@@ -355,7 +359,17 @@
       "unevaluatedProperties": false
     },
     "headerAssertion": {
-      "allOf": [{ "$ref": "#/$defs/assertionBase" }],
+      "allOf": [
+        { "$ref": "#/$defs/assertionBase" },
+        {
+          "if": { "required": ["match"] },
+          "then": { "required": ["path", "itemPath", "expect"] }
+        },
+        {
+          "if": { "required": ["itemPath"] },
+          "then": { "required": ["match"] }
+        }
+      ],
       "required": ["name"],
       "properties": {
         "target": { "const": "header" },
@@ -378,7 +392,32 @@
           "default": "none"
         },
         "path": {
-          "description": "JSON Pointer into the decoded value. Requires decode: base64json.",
+          "description": "JSON Pointer into the decoded value. Requires decode: base64json. With match, this pointer must locate an array.",
+          "$ref": "#/$defs/jsonPointer"
+        },
+        "match": {
+          "description": "Check itemPath on each object in the path array that matches every field set here. An empty object selects every object. Objects that do not match are skipped. An array with no matches passes.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "scheme": { "type": "string" },
+            "networkNamespace": {
+              "description": "CAIP-2 namespace. Matches a network whose value starts with this namespace and a colon.",
+              "type": "string",
+              "pattern": "^[-a-z0-9]{3,8}$"
+            },
+            "assetTransferMethod": { "type": "string" },
+            "defaultAssetTransferMethod": {
+              "description": "assetTransferMethod to use when extra.assetTransferMethod is omitted. Exact on EVM defaults to eip3009.",
+              "type": "string"
+            }
+          },
+          "dependentRequired": {
+            "defaultAssetTransferMethod": ["assetTransferMethod"]
+          }
+        },
+        "itemPath": {
+          "description": "JSON Pointer into each array element selected by match. Requires match.",
           "$ref": "#/$defs/jsonPointer"
         },
         "expect": { "$ref": "#/$defs/expectation" },

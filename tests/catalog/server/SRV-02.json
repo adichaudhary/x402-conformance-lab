@@ -1,0 +1,132 @@
+{
+  "$schema": "../../../schemas/test-definition.schema.json",
+  "id": "SRV-02",
+  "title": "Accepts entries have required fields, CAIP-2 networks, atomic amounts, and scheme extras",
+  "role": "server",
+  "specArea": "payment-required-schema",
+  "specRef": "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L120-L130",
+  "additionalSpecRefs": [
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L627-L642",
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/exact/scheme_exact_evm.md?plain=1#L69-L73",
+    "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/schemes/upto/scheme_upto_evm.md?plain=1#L255-L267"
+  ],
+  "severity": "high",
+  "priority": "P0",
+  "advisory": false,
+  "requires": [],
+  "input": {
+    "scenario": "Request the paid resource with no PAYMENT-SIGNATURE header and inspect every accepts[] entry.",
+    "setup": {
+      "facilitator": "implementation",
+      "chain": "none"
+    },
+    "steps": [
+      {
+        "id": "unpaid",
+        "description": "Plain request to the paid resource, no payment header.",
+        "payment": { "mode": "none" }
+      }
+    ]
+  },
+  "expectedBehavior": "An unpaid request returns PaymentRequired version 2. Every accepts[] entry includes scheme, network, amount, asset, payTo, and maxTimeoutSeconds. network is a CAIP-2 identifier (namespace:reference) that the implementation config lists as supported. amount is a base-10 integer string of atomic token units, never a decimal such as 0.01. An exact entry on an EVM network whose extra.assetTransferMethod is eip3009, including when that field is omitted, includes extra.name and extra.version. An upto entry on an EVM network includes extra.facilitatorAddress.",
+  "assertions": [
+    {
+      "id": "status-402",
+      "target": "httpStatus",
+      "description": "Status is 402 Payment Required.",
+      "expect": { "equals": 402 }
+    },
+    {
+      "id": "payment-required-present",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "description": "PAYMENT-REQUIRED header is present.",
+      "present": true
+    },
+    {
+      "id": "requirements-valid",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "description": "Every accepts[] entry has the required fields, a CAIP-2 network, and an atomic-unit amount.",
+      "expect": { "matchesSchema": "PaymentRequired" }
+    },
+    {
+      "id": "amount-atomic",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "path": "/accepts",
+      "match": {},
+      "itemPath": "/amount",
+      "description": "Every accepts[] amount is a base-10 integer string of atomic units, not a decimal.",
+      "expect": { "pattern": "^(0|[1-9][0-9]*)$" }
+    },
+    {
+      "id": "network-caip2",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "path": "/accepts",
+      "match": {},
+      "itemPath": "/network",
+      "description": "Every accepts[] network is a CAIP-2 identifier (namespace:reference).",
+      "expect": { "pattern": "^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$" }
+    },
+    {
+      "id": "network-supported",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "path": "/accepts",
+      "match": {},
+      "itemPath": "/network",
+      "description": "Every accepts[] network is one the implementation config declares as supported.",
+      "expect": { "supportedNetwork": true }
+    },
+    {
+      "id": "exact-eip3009-name",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "path": "/accepts",
+      "match": {
+        "scheme": "exact",
+        "networkNamespace": "eip155",
+        "assetTransferMethod": "eip3009",
+        "defaultAssetTransferMethod": "eip3009"
+      },
+      "itemPath": "/extra/name",
+      "description": "Every exact EIP-3009 accepts[] entry on an EVM network includes extra.name.",
+      "expect": { "pattern": "^.+$" }
+    },
+    {
+      "id": "exact-eip3009-version",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "path": "/accepts",
+      "match": {
+        "scheme": "exact",
+        "networkNamespace": "eip155",
+        "assetTransferMethod": "eip3009",
+        "defaultAssetTransferMethod": "eip3009"
+      },
+      "itemPath": "/extra/version",
+      "description": "Every exact EIP-3009 accepts[] entry on an EVM network includes extra.version.",
+      "expect": { "pattern": "^.+$" }
+    },
+    {
+      "id": "upto-facilitator-address",
+      "target": "header",
+      "name": "PAYMENT-REQUIRED",
+      "decode": "base64json",
+      "path": "/accepts",
+      "match": { "scheme": "upto", "networkNamespace": "eip155" },
+      "itemPath": "/extra/facilitatorAddress",
+      "description": "Every upto accepts[] entry on an EVM network includes extra.facilitatorAddress.",
+      "expect": { "pattern": "^.+$" }
+    }
+  ],
+  "notes": "extra.name and extra.version are required for exact EIP-3009 on EVM, including when assetTransferMethod is omitted. Permit2 and ERC-7710 use their own extra rules. extra.facilitatorAddress is required for upto on eip155 networks. An implementation passes an assertion when it advertises no entry of that kind. network-supported compares against the config's network:* features (network:eip155 covers any eip155 chain). If the config declares none, that assertion reports ERROR instead of FAIL."
+}

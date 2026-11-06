@@ -1,5 +1,11 @@
 import type { ImplementationConfig } from "./config.js";
-import { decodeBase64Json, evaluateExpectation, getPointer, type Check } from "./expect.js";
+import {
+  decodeBase64Json,
+  evaluateExpectation,
+  getPointer,
+  type Check,
+  type ExpectContext,
+} from "./expect.js";
 import type { Assertion, AssertionResult, BodyAssertion, HeaderAssertion } from "./types.js";
 
 /** What we recorded for one step. Header names are lower-cased. */
@@ -37,7 +43,73 @@ function resolveExpectation(a: Assertion, res: StepResponse) {
   return visit(a.expect) as typeof a.expect;
 }
 
-function checkHeader(a: HeaderAssertion, res: StepResponse): Check {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Omitted extra.assetTransferMethod resolves to the match default. A present value is used as-is. */
+function resolvedTransferMethod(
+  entry: Record<string, unknown>,
+  whenOmitted: string | undefined,
+): string | undefined {
+  const extra = entry.extra;
+  if (!isRecord(extra) || !("assetTransferMethod" in extra)) return whenOmitted;
+  return typeof extra.assetTransferMethod === "string" ? extra.assetTransferMethod : undefined;
+}
+
+function entryMatches(entry: unknown, match: NonNullable<HeaderAssertion["match"]>): boolean {
+  if (!isRecord(entry)) return false;
+  if (match.scheme !== undefined && entry.scheme !== match.scheme) return false;
+  if (match.networkNamespace !== undefined) {
+    const prefix = `${match.networkNamespace}:`;
+    if (typeof entry.network !== "string" || !entry.network.startsWith(prefix)) return false;
+  }
+  if (match.assetTransferMethod !== undefined) {
+    const method = resolvedTransferMethod(entry, match.defaultAssetTransferMethod);
+    if (method !== match.assetTransferMethod) return false;
+  }
+  return true;
+}
+
+/** Networks the config declares. Without any, "supported network" can't be judged, so the test ERRORs. */
+function expectContext(
+  expect: NonNullable<HeaderAssertion["expect"]>,
+  config: ImplementationConfig,
+): ExpectContext {
+  const networks = config.features
+    .filter((feature) => feature.startsWith("network:"))
+    .map((feature) => feature.slice("network:".length));
+  if (expect.supportedNetwork && networks.length === 0) {
+    throw new NotEvaluable("config declares no network:* feature, so supported networks can't be checked");
+  }
+  return { networks };
+}
+
+function checkEachMatch(
+  a: HeaderAssertion,
+  value: unknown,
+  expect: NonNullable<HeaderAssertion["expect"]>,
+  ctx: ExpectContext,
+): Check {
+  if (!Array.isArray(value)) return { ok: false, message: `${a.path ?? "value"} is not an array` };
+  if (!a.itemPath || !a.match) return { ok: false, message: "match requires itemPath" };
+  const failures: string[] = [];
+  for (let index = 0; index < value.length; index++) {
+    const entry = value[index];
+    if (!entryMatches(entry, a.match)) continue;
+    const found = getPointer(entry, a.itemPath);
+    const where = `${a.path}/${index}`;
+    if (!found.found) {
+      failures.push(`${where} has no value at ${a.itemPath}`);
+      continue;
+    }
+    const check = evaluateExpectation(found.value, expect, ctx);
+    if (!check.ok) failures.push(`${where} ${a.itemPath}: ${check.message}`);
+  }
+  return failures.length === 0 ? { ok: true } : { ok: false, message: failures.join(". ") };
+}
+
+function checkHeader(a: HeaderAssertion, res: StepResponse, config: ImplementationConfig): Check {
   const raw = res.headers[a.name.toLowerCase()];
   if (raw === undefined) {
     if (a.present === true) return { ok: false, message: `${a.name} header is missing` };
@@ -61,7 +133,11 @@ function checkHeader(a: HeaderAssertion, res: StepResponse): Check {
     }
     value = found.value;
   }
-  return evaluateExpectation(value, resolveExpectation(a, res)!);
+  const expect = resolveExpectation(a, res);
+  if (!expect) return { ok: false, message: `${a.name} assertion has no expect` };
+  const ctx = expectContext(expect, config);
+  if (a.match) return checkEachMatch(a, value, expect, ctx);
+  return evaluateExpectation(value, expect, ctx);
 }
 
 function checkBody(a: BodyAssertion, res: StepResponse, config: ImplementationConfig): Check {
@@ -159,7 +235,7 @@ export function evaluateAssertion(
         base.actual = res.status;
         break;
       case "header":
-        check = checkHeader(a, res);
+        check = checkHeader(a, res, config);
         break;
       case "body":
         check = checkBody(a, res, config);
