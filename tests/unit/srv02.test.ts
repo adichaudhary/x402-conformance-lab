@@ -15,7 +15,6 @@ import {
 const SPEC_REF =
   "https://github.com/x402-foundation/x402/blob/e95b06661e1a2a8a9a21fce34cc28b9934834650/specs/x402-specification-v2.md?plain=1#L120-L130";
 
-
 const srv02 = loadCatalog().tests.find((t) => t.id === "SRV-02")!;
 const SUPPORTED_NETWORKS = ["network:eip155:31337", "network:solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1"];
 let server: ServerType | undefined;
@@ -49,11 +48,10 @@ function statusOf(result: Awaited<ReturnType<typeof runAgainstMock>>["result"], 
 }
 
 describe("SRV-02 against the mock server", () => {
-
   it("links specRef at the pinned PaymentRequired lines", () => {
     expect(srv02.specRef).toBe(SPEC_REF);
   });
-  
+
   it("passes against a correct exact EIP-3009 server", async () => {
     const { report, result } = await runAgainstMock();
     expect(result.status).toBe("PASS");
