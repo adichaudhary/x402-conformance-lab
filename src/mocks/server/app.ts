@@ -21,6 +21,16 @@ export type MockServerFault =
   | "wrong-version" // x402Version 1
   | "empty-accepts" // accepts: []
   | "not-base64" // PAYMENT-REQUIRED is raw JSON, not base64
+  | "legacy-network" // network "base-sepolia" instead of a CAIP-2 id
+  | "omit-extra-name" // exact EIP-3009 entry has no extra.name
+  | "blank-extra-name" // exact EIP-3009 extra.name is ""
+  | "omit-extra-version" // exact EIP-3009 entry has no extra.version
+  | "omit-asset-transfer-method" // exact entry omits extra.assetTransferMethod (defaults to eip3009)
+  | "permit2-without-eip712" // second exact entry uses permit2 and has no name or version
+  | "upto-offer" // also advertise upto on EVM with extra.facilitatorAddress
+  | "upto-omit-facilitator" // upto on EVM with no extra.facilitatorAddress
+  | "blank-facilitator-address" // upto on EVM with extra.facilitatorAddress ""
+  | "upto-solana" // upto on Solana with no facilitatorAddress
   | "accept-payment" // 200 + paid content + PAYMENT-RESPONSE success: true
   | "accept-first-payment" // accept the first payment, then reject later payments (replay test)
   | "settlement-failure" // 402 + PAYMENT-RESPONSE success: false with an error reason
@@ -55,6 +65,8 @@ const DEFAULTS = {
   payTo: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
 };
 
+const SOLANA_DEVNET = "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1";
+
 const encode = (value: unknown) => Buffer.from(JSON.stringify(value), "utf8").toString("base64");
 
 function decodePayment(header: string): Record<string, unknown> | null {
@@ -75,23 +87,71 @@ export function createMockServer(options: MockServerOptions = {}) {
   const app = new Hono();
   let paymentCount = 0;
 
+  const exactExtra = () => {
+    const extra: Record<string, unknown> = {
+      name: "USDC",
+      version: "2",
+      assetTransferMethod: "eip3009",
+    };
+    if (faults.has("omit-extra-name")) delete extra.name;
+    if (faults.has("blank-extra-name")) extra.name = "";
+    if (faults.has("omit-extra-version")) delete extra.version;
+    if (faults.has("omit-asset-transfer-method")) delete extra.assetTransferMethod;
+    return extra;
+  };
+
+  const uptoEntry = (network: string, facilitatorAddress: string | undefined) => {
+    const extra: Record<string, unknown> = { name: "USDC", version: "2" };
+    if (facilitatorAddress !== undefined) extra.facilitatorAddress = facilitatorAddress;
+    return {
+      scheme: "upto",
+      network,
+      amount: o.amount,
+      asset: o.asset,
+      payTo: o.payTo,
+      maxTimeoutSeconds: 300,
+      extra,
+    };
+  };
+
+  const accepts = (): unknown[] => {
+    if (faults.has("empty-accepts")) return [];
+    const offered: unknown[] = [
+      {
+        scheme: "exact",
+        network: faults.has("legacy-network") ? "base-sepolia" : o.network,
+        amount: faults.has("decimal-amount") ? "0.01" : o.amount,
+        asset: o.asset,
+        payTo: o.payTo,
+        maxTimeoutSeconds: 60,
+        extra: exactExtra(),
+      },
+    ];
+    if (faults.has("permit2-without-eip712")) {
+      offered.push({
+        scheme: "exact",
+        network: o.network,
+        amount: o.amount,
+        asset: o.asset,
+        payTo: o.payTo,
+        maxTimeoutSeconds: 60,
+        extra: { assetTransferMethod: "permit2" },
+      });
+    }
+    if (faults.has("upto-offer")) {
+      offered.push(uptoEntry(o.network, "0x0000000000000000000000000000000000000001"));
+    }
+    if (faults.has("upto-omit-facilitator")) offered.push(uptoEntry(o.network, undefined));
+    if (faults.has("blank-facilitator-address")) offered.push(uptoEntry(o.network, ""));
+    if (faults.has("upto-solana")) offered.push(uptoEntry(SOLANA_DEVNET, undefined));
+    return offered;
+  };
+
   const paymentRequired = (url: string, error: string) => ({
     x402Version: faults.has("wrong-version") ? 1 : 2,
     error,
     resource: { url, description: "Mock paid resource", mimeType: "application/json" },
-    accepts: faults.has("empty-accepts")
-      ? []
-      : [
-          {
-            scheme: "exact",
-            network: o.network,
-            amount: faults.has("decimal-amount") ? "0.01" : o.amount,
-            asset: o.asset,
-            payTo: o.payTo,
-            maxTimeoutSeconds: 60,
-            extra: { name: "USDC", version: "2", assetTransferMethod: "eip3009" },
-          },
-        ],
+    accepts: accepts(),
   });
 
   const respond402 = (url: string, error: string, extraHeaders: Record<string, string> = {}, body = "{}") => {

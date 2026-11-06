@@ -16,6 +16,8 @@ export interface Expectation {
   min?: number;
   max?: number;
   pattern?: string;
+  /** The value must be a network the implementation config declares in a network:* feature. */
+  supportedNetwork?: boolean;
   matchesSchema?:
     "PaymentRequired" | "PaymentPayload" | "SettlementResponse" | "VerifyResponse" | "SupportedResponse";
 }
@@ -59,12 +61,23 @@ export interface HttpStatusAssertion extends AssertionBase {
   expect: Expectation;
 }
 
+export interface HeaderMatch {
+  scheme?: string;
+  networkNamespace?: string;
+  assetTransferMethod?: string;
+  /** Used when extra.assetTransferMethod is omitted. Requires assetTransferMethod. */
+  defaultAssetTransferMethod?: string;
+}
+
 export interface HeaderAssertion extends AssertionBase {
   target: "header";
   name: string;
   present?: boolean;
   decode?: "none" | "base64json";
   path?: string;
+  /** When set, path is an array and itemPath is checked on each matching element. */
+  match?: HeaderMatch;
+  itemPath?: string;
   expect?: Expectation;
   passIfAbsent?: boolean;
 }

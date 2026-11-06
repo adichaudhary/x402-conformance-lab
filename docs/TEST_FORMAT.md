@@ -87,14 +87,16 @@ Every assertion has `id`, `target`, `description`, and optionally:
 
 There are four targets:
 
-| `target`     | Extra fields                                                  | Checks                                                                                                                                  |
-| ------------ | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `httpStatus` | `expect`                                                      | The response status code                                                                                                                |
-| `header`     | `name`, `present`, `decode`, `path`, `expect`, `passIfAbsent` | A response header. `decode: "base64json"` decodes x402 headers. `path` is a JSON Pointer into the decoded value.                        |
-| `body`       | `check`, `path`, `expect`, `passIfAbsent`                     | Paid-content checks use the configured marker. `json` compares JSON at `path`. `configuredKinds` and `allKindsV2` check `/supported`.   |
-| `onchain`    | `measure`, `account`, `asset`, `expect`                       | `balanceDelta` is the change in `account`'s token balance across the step. `account` is `payer`, `payTo`, `facilitator`, or an address. |
+| `target`     | Extra fields                                                                       | Checks                                                                                                                                                                                            |
+| ------------ | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `httpStatus` | `expect`                                                                           | The response status code                                                                                                                                                                          |
+| `header`     | `name`, `present`, `decode`, `path`, `match`, `itemPath`, `expect`, `passIfAbsent` | A response header. `decode: "base64json"` decodes x402 headers. `path` is a JSON Pointer into the decoded value. `match` plus `itemPath` checks that pointer on every array element that matches. |
+| `body`       | `check`, `path`, `expect`, `passIfAbsent`                                          | Paid-content checks use the configured marker. `json` compares JSON at `path`. `configuredKinds` and `allKindsV2` check `/supported`.                                                             |
+| `onchain`    | `measure`, `account`, `asset`, `expect`                                            | `balanceDelta` is the change in `account`'s token balance across the step. `account` is `payer`, `payTo`, `facilitator`, or an address.                                                           |
 
 `expect` takes one or more of `equals`, `equalsIgnoreCase`, `notEquals`, `oneOf`, `notOneOf`, `min`, `max`, `pattern`, `matchesSchema`. All of them must hold. Expected strings may use `${payment.payer}`, `${payment.network}`, or `${payment.amount}`; the runner resolves them from the payment sent in that step. This lets balance and receipt assertions compare against the selected requirement without hard-coding one implementation's values.
+
+`match` on a header assertion selects objects inside the array at `path`. Each selected object must satisfy `expect` at `itemPath`. An empty `match` selects every object. Objects that do not match are skipped, and an array with no matches passes. `expect.supportedNetwork: true` requires the value to be a network the config lists in a `network:*` feature (`network:eip155` covers any eip155 chain); a config with no network features gives ERROR. `match.defaultAssetTransferMethod` is used when `extra.assetTransferMethod` is omitted.
 
 ## Results
 
