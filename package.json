@@ -32,7 +32,7 @@
     "ajv-formats": "^3.0.1",
     "commander": "^15.0.0",
     "hono": "^4.13.14",
-    "viem": "^2.57.14"
+    "viem": "^2.57.17"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
