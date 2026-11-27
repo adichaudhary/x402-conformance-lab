@@ -38,14 +38,14 @@
     "@eslint/js": "^10.0.1",
     "@openzeppelin/contracts": "^5.7.0",
     "@types/node": "^26.6.5",
-    "eslint": "^10.13.0",
+    "eslint": "^10.15.0",
     "eslint-config-prettier": "^10.1.8",
     "forge-std": "github:foundry-rs/forge-std#v1.17.0",
-    "prettier": "^3.9.10",
+    "prettier": "^3.10.1",
     "tsx": "^4.23.15",
     "typescript": "~6.0.0",
-    "typescript-eslint": "^8.72.0",
-    "vitest": "^5.0.5"
+    "typescript-eslint": "^8.74.0",
+    "vitest": "^5.1.1"
   },
   "bin": {
     "x402-conformance": "dist/cli/index.js"
